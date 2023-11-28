@@ -176,7 +176,7 @@ func (response *Response) GetByte() []byte {
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			log.Println(err)
+			log.Println("GetByte Body.Close Error:", err)
 		}
 	}(response.ResponseRaw.Body)
 	body, ok := io.ReadAll(response.ResponseRaw.Body)

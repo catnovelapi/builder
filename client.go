@@ -52,7 +52,7 @@ func (client *Client) SetBaseUrl(baseUrl string) *Client {
 func (client *Client) SetDebugFile(logFileName string) *Client {
 	file, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
-		log.Println(err)
+		log.Println("SetDebugFile error: ", err)
 	} else {
 		client.debugFile = file
 	}
@@ -145,7 +145,7 @@ func (client *Client) SetQueryParamString(query string) *Client {
 		// 将 params 中的参数存储到 queryParams 中
 		client.SetFormDataQueryParams(params)
 	} else {
-		log.Println(err)
+		log.Println("SetQueryString url.ParseQuery error:", err)
 	}
 	return client
 }
@@ -154,7 +154,7 @@ func (client *Client) SetQueryParamString(query string) *Client {
 func (client *Client) SetProxy(proxy string) *Client {
 	u, err := url.Parse(proxy)
 	if err != nil {
-		log.Println(err)
+		log.Println("SetProxy url.Parse error:", err)
 		return client
 	}
 	// 设置 Transport 的 Proxy 字段

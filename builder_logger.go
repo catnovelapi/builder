@@ -14,7 +14,7 @@ func indentJson(a string) string {
 	var objmap map[string]*json.RawMessage
 	err := json.Unmarshal([]byte(a), &objmap)
 	if err != nil {
-		log.Println(err)
+		log.Println("indentJson:解析 JSON 字符串失败")
 		return a + "\n" + err.Error()
 	}
 	formatted, err := json.MarshalIndent(objmap, "", "  ")
