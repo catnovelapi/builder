@@ -42,8 +42,8 @@ func NewClient() *Client {
 	return client
 }
 
-// SetBaseUrl 方法用于设置HTTP请求的 BaseUrl 部分。它接收一个 string 类型的参数，该参数表示 BaseUrl 的值。
-func (client *Client) SetBaseUrl(baseUrl string) *Client {
+// SetBaseURL 方法用于设置HTTP请求的 BaseUrl 部分。它接收一个 string 类型的参数，该参数表示 BaseUrl 的值。
+func (client *Client) SetBaseURL(baseUrl string) *Client {
 	client.baseUrl = strings.TrimRight(baseUrl, "/")
 	return client
 }
@@ -95,7 +95,7 @@ func (client *Client) SetRetryNumber(num int) *Client {
 // SetHeader 方法用于设置 HTTP 请求的 Header 部分。它接收两个 string 类型的参数，
 func (client *Client) SetHeader(key string, value interface{}) *Client {
 	// 将 value 转换为 string 类型, 并将其存储到 headers 中
-	client.headers[key] = []string{fmt.Sprintf("%v", value)}
+	client.headers.Set(key, fmt.Sprintf("%v", value))
 	return client
 }
 
