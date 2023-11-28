@@ -108,11 +108,16 @@ func (request *Request) newDoResponse(rep *Response) (*Response, error) {
 	defer func() {
 		request.client.Lock()
 		defer request.client.Unlock()
-		if rep.RequestSource.client.debug {
-			fmt.Println(newLogger(rep).CreateLogInfo())
+		var logText string
+		if rep.RequestSource.client.GetClientDebug() {
+			logText = newLogger(rep).CreateLogInfo()
+			fmt.Println(logText)
 		}
 		if rep.RequestSource.client.debugFile != nil {
-			_, _ = rep.RequestSource.client.debugFile.WriteString(newLogger(rep).CreateLogInfo())
+			if logText == "" {
+				logText = newLogger(rep).CreateLogInfo()
+			}
+			_, _ = rep.RequestSource.client.debugFile.WriteString(logText)
 		}
 	}()
 	return rep, nil
@@ -158,6 +163,10 @@ func (response *Response) GetStatusCode() int {
 	return response.ResponseRaw.StatusCode
 }
 
+func (response *Response) IsStatusOk() bool {
+	return response.ResponseRaw.StatusCode == 200
+}
+
 // GetStatus 方法用于获取 HTTP 响应的状态。
 func (response *Response) GetStatus() string {
 	return response.ResponseRaw.Status
@@ -176,7 +185,7 @@ func (response *Response) GetByte() []byte {
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			log.Println(err)
+			log.Println("GetByte Body.Close Error:", err)
 		}
 	}(response.ResponseRaw.Body)
 	body, ok := io.ReadAll(response.ResponseRaw.Body)

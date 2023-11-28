@@ -42,8 +42,8 @@ func NewClient() *Client {
 	return client
 }
 
-// SetBaseUrl 方法用于设置HTTP请求的 BaseUrl 部分。它接收一个 string 类型的参数，该参数表示 BaseUrl 的值。
-func (client *Client) SetBaseUrl(baseUrl string) *Client {
+// SetBaseURL 方法用于设置HTTP请求的 BaseUrl 部分。它接收一个 string 类型的参数，该参数表示 BaseUrl 的值。
+func (client *Client) SetBaseURL(baseUrl string) *Client {
 	client.baseUrl = strings.TrimRight(baseUrl, "/")
 	return client
 }
@@ -52,7 +52,7 @@ func (client *Client) SetBaseUrl(baseUrl string) *Client {
 func (client *Client) SetDebugFile(logFileName string) *Client {
 	file, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
-		log.Println(err)
+		log.Println("SetDebugFile error: ", err)
 	} else {
 		client.debugFile = file
 	}
@@ -95,7 +95,7 @@ func (client *Client) SetRetryNumber(num int) *Client {
 // SetHeader 方法用于设置 HTTP 请求的 Header 部分。它接收两个 string 类型的参数，
 func (client *Client) SetHeader(key string, value interface{}) *Client {
 	// 将 value 转换为 string 类型, 并将其存储到 headers 中
-	client.headers[key] = []string{fmt.Sprintf("%v", value)}
+	client.headers.Set(key, fmt.Sprintf("%v", value))
 	return client
 }
 
@@ -145,7 +145,7 @@ func (client *Client) SetQueryParamString(query string) *Client {
 		// 将 params 中的参数存储到 queryParams 中
 		client.SetFormDataQueryParams(params)
 	} else {
-		log.Println(err)
+		log.Println("SetQueryString url.ParseQuery error:", err)
 	}
 	return client
 }
@@ -154,7 +154,7 @@ func (client *Client) SetQueryParamString(query string) *Client {
 func (client *Client) SetProxy(proxy string) *Client {
 	u, err := url.Parse(proxy)
 	if err != nil {
-		log.Println(err)
+		log.Println("SetProxy url.Parse error:", err)
 		return client
 	}
 	// 设置 Transport 的 Proxy 字段

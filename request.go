@@ -59,7 +59,7 @@ func (request *Request) SetBody(body interface{}) *Request {
 			// 尝试将 map 转换为 JSON 字符串
 			if m, err := json.Marshal(v); err != nil {
 				// 如果转换失败，打印错误信息
-				log.Println(err)
+				log.Println("SetBody json.Marshal error:", err)
 			} else {
 				// 如果转换成功，设置 ContentLength 为 JSON 字符串的长度，并将 JSON 字符串转换为 ReadCloser
 				request.RequestRaw.ContentLength = int64(len(string(m)))
@@ -128,7 +128,7 @@ func (request *Request) SetQueryString(query string) *Request {
 			}
 		}
 	} else {
-		log.Println(err)
+		log.Println("SetQueryString url.ParseQuery error:", err)
 	}
 	return request
 }
