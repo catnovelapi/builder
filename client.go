@@ -196,8 +196,8 @@ func (client *Client) GetClientHeaders() http.Header {
 	return client.headers
 }
 
-// GetClientBaseUrl 方法用于获取 HTTP 请求的 BaseUrl 部分。它返回一个 string 类型的参数。
-func (client *Client) GetClientBaseUrl() string {
+// GetClientBaseURL 方法用于获取 HTTP 请求的 BaseUrl 部分。它返回一个 string 类型的参数。
+func (client *Client) GetClientBaseURL() string {
 	return client.baseUrl
 }
 

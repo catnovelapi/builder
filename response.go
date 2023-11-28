@@ -50,11 +50,11 @@ func (request *Request) newParseUrl(path string) (*url.URL, error) {
 	request.client.Lock()
 	defer request.client.Unlock()
 	// 如果 baseUrl 不为空，且 path 不是以 / 开头，则在 path 前加上 /
-	if request.client.baseUrl != "" && path[0] != '/' {
+	if request.client.GetClientBaseURL() != "" && path[0] != '/' {
 		path = "/" + path
 	}
 	// 解析 URL, 如果失败则返回错误
-	u, err := url.Parse(request.client.baseUrl + path)
+	u, err := url.Parse(request.client.GetClientBaseURL() + path)
 	if err != nil {
 		return nil, err
 	}
@@ -69,8 +69,9 @@ func (request *Request) initQuery() {
 	request.client.Lock()
 	defer request.client.Unlock()
 	if request.RequestRaw.Method == MethodGet {
+		// GET请求不需要设置Body,因为Body会被忽略
 		request.RequestRaw.URL.RawQuery = request.GetQueryParamsEncode()
-		return // GET请求不需要设置Body
+		return
 	}
 	if len(request.queryParams) > 0 {
 		if request.GetContentType() == "" {
