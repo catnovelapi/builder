@@ -3,6 +3,7 @@ package builder
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/tidwall/gjson"
 	"log"
 	"net/http"
 	"sort"
@@ -11,6 +12,10 @@ import (
 
 // indentJson 方法用于格式化 JSON 字符串。它接收一个 string 类型的参数，该参数表示 JSON 字符串。
 func indentJson(a string) string {
+	// 判断是否为 JSON 字符串, 如果不是则直接返回
+	if !gjson.Valid(a) {
+		return a
+	}
 	var objmap map[string]*json.RawMessage
 	err := json.Unmarshal([]byte(a), &objmap)
 	if err != nil {
