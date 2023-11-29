@@ -105,22 +105,22 @@ func (request *Request) newDoResponse(rep *Response) (*Response, error) {
 		return nil, err
 	}
 	rep.ResponseRaw = responseRaw
-	defer request.newLogFunc(rep)
+	defer rep.newLogFunc()
 	return rep, nil
 }
-func (request *Request) newLogFunc(rep *Response) {
-	request.Lock()
-	defer request.Unlock()
+func (response *Response) newLogFunc() {
+	response.Lock()
+	defer response.Unlock()
 	var logText string
-	if rep.RequestSource.client.GetClientDebug() {
-		logText = newLogger(rep).CreateLogInfo()
+	if response.RequestSource.client.GetClientDebug() {
+		logText = newLogger(response).CreateLogInfo()
 		fmt.Println(logText)
 	}
-	if rep.RequestSource.client.debugFile != nil {
+	if response.RequestSource.client.debugFile != nil {
 		if logText == "" {
-			logText = newLogger(rep).CreateLogInfo()
+			logText = newLogger(response).CreateLogInfo()
 		}
-		_, _ = rep.RequestSource.client.debugFile.WriteString(logText)
+		_, _ = response.RequestSource.client.debugFile.WriteString(logText)
 	}
 }
 
