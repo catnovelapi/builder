@@ -9,13 +9,11 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"time"
 )
 
 // Client 类型用于存储 HTTP 请求的相关信息。
 type Client struct {
-	sync.Mutex
 	timeout     int          // timeout 用于存储 HTTP 请求的 Timeout 部分
 	retryNum    int          // retryNum 用于存储重试次数
 	baseUrl     string       // baseUrl 用于存储 HTTP 请求的 BaseUrl 部分

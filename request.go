@@ -44,8 +44,8 @@ func (client *Client) R() *Request {
 func (request *Request) SetBody(body interface{}) *Request {
 	if body != nil {
 		// 加锁以确保线程安全
-		request.client.Lock()
-		defer request.client.Unlock()
+		request.Lock()
+		defer request.Unlock()
 
 		// 使用 type switch 来检查 body 的实际类型
 		switch v := body.(type) {
@@ -82,8 +82,8 @@ func (request *Request) SetBody(body interface{}) *Request {
 
 // SetHeader 方法用于设置 HTTP 请求的 Header 部分。它接收两个 string 类型的参数，
 func (request *Request) SetHeader(key, value string) *Request {
-	request.client.Lock()
-	defer request.client.Unlock()
+	request.Lock()
+	defer request.Unlock()
 	request.RequestRaw.Header.Set(key, value)
 	return request
 }
@@ -98,8 +98,8 @@ func (request *Request) SetCookies(cookie []*http.Cookie) *Request {
 
 // SetCookie 方法用于设置 HTTP 请求的 Cookie 部分。它接收一个 *http.Cookie 类型的参数，
 func (request *Request) SetCookie(cookie *http.Cookie) *Request {
-	request.client.Lock()
-	defer request.client.Unlock()
+	request.Lock()
+	defer request.Unlock()
 	request.RequestRaw.AddCookie(cookie)
 	return request
 }
@@ -144,7 +144,7 @@ func (request *Request) SetContentType(contentType string) *Request {
 // GetQueryParamsEncode 方法用于获取 HTTP 请求的 Query 部分的 URL 编码字符串。
 func (request *Request) GetQueryParamsEncode() string {
 	request.Lock()
-	defer request.client.Unlock()
+	defer request.Unlock()
 	return request.GetQueryParams().Encode()
 
 }
