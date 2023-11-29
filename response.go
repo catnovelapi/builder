@@ -105,22 +105,23 @@ func (request *Request) newDoResponse(rep *Response) (*Response, error) {
 		return nil, err
 	}
 	rep.ResponseRaw = responseRaw
-	defer func() {
-		request.Lock()
-		defer request.client.Unlock()
-		var logText string
-		if rep.RequestSource.client.GetClientDebug() {
-			logText = newLogger(rep).CreateLogInfo()
-			fmt.Println(logText)
-		}
-		if rep.RequestSource.client.debugFile != nil {
-			if logText == "" {
-				logText = newLogger(rep).CreateLogInfo()
-			}
-			_, _ = rep.RequestSource.client.debugFile.WriteString(logText)
-		}
-	}()
+	defer request.newLogFunc(rep)
 	return rep, nil
+}
+func (request *Request) newLogFunc(rep *Response) {
+	request.Lock()
+	defer request.Unlock()
+	var logText string
+	if rep.RequestSource.client.GetClientDebug() {
+		logText = newLogger(rep).CreateLogInfo()
+		fmt.Println(logText)
+	}
+	if rep.RequestSource.client.debugFile != nil {
+		if logText == "" {
+			logText = newLogger(rep).CreateLogInfo()
+		}
+		_, _ = rep.RequestSource.client.debugFile.WriteString(logText)
+	}
 }
 
 // Get 方法用于创建一个 GET 请求。它接收一个 string 类型的参数，表示 HTTP 请求的路径。
