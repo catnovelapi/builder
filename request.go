@@ -164,25 +164,33 @@ func (request *Request) SetContentType(contentType string) *Request {
 func (request *Request) GetQueryParamsEncode() string {
 	request.client.Lock()
 	defer request.client.Unlock()
+	// 赋值给 v, 以确保线程安全
 	v := request.GetQueryParams()
 	if v == nil {
 		return ""
 	}
 	var buf strings.Builder
+	// 创建一个 string 类型的切片
 	keys := make([]string, 0, len(v))
 	for k := range v {
 		keys = append(keys, k)
 	}
+	// 对切片进行排序
 	sort.Strings(keys)
 	for _, k := range keys {
 		vs := v[k]
+		// 对 key 进行 URL 编码, 并将结果赋值给 keyEscaped
 		keyEscaped := url.QueryEscape(k)
 		for _, v1 := range vs {
 			if buf.Len() > 0 {
+				// 如果 buf 的长度大于 0, 则在 buf 尾部添加 &
 				buf.WriteByte('&')
 			}
+
 			buf.WriteString(keyEscaped)
+			// 在 buf 尾部添加 =
 			buf.WriteByte('=')
+			// 将 v1 进行 URL 编码, 并将结果写入 buf
 			buf.WriteString(url.QueryEscape(v1))
 		}
 	}
@@ -191,6 +199,7 @@ func (request *Request) GetQueryParamsEncode() string {
 
 // GetQueryParamsNopCloser 方法用于获取 HTTP 请求的 Query 部分的 ReadCloser。
 func (request *Request) GetQueryParamsNopCloser() io.ReadCloser {
+	// 将字符串转换为 io.ReadCloser, 并返回
 	return io.NopCloser(strings.NewReader(request.GetQueryParamsEncode()))
 }
 
