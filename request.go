@@ -114,8 +114,8 @@ func (request *Request) SetQueryParams(query map[string]interface{}) *Request {
 
 // SetQueryParam 方法用于设置 HTTP 请求的 Query 部分。它接收两个 string 类型的参数，
 func (request *Request) SetQueryParam(key string, value interface{}) *Request {
-	request.client.Lock()
-	defer request.client.Unlock()
+	request.Lock()
+	defer request.Unlock()
 	request.queryParams.Set(key, fmt.Sprintf("%v", value))
 	return request
 }
@@ -143,6 +143,8 @@ func (request *Request) SetContentType(contentType string) *Request {
 
 // GetQueryParamsEncode 方法用于获取 HTTP 请求的 Query 部分的 URL 编码字符串。
 func (request *Request) GetQueryParamsEncode() string {
+	request.Lock()
+	defer request.client.Unlock()
 	return request.GetQueryParams().Encode()
 
 }
