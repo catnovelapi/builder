@@ -9,9 +9,11 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 )
 
 type Request struct {
+	sync.RWMutex
 	client      *Client       // 指向 Client 的指针
 	RequestRaw  *http.Request // 指向 http.Request 的指针
 	queryParams url.Values    // 用于存储 Query 参数的 url.Values

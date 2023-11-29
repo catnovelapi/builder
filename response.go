@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"sync"
 )
 
 const (
@@ -40,6 +41,7 @@ const (
 )
 
 type Response struct {
+	sync.RWMutex
 	Result        string         // 响应体字符串结果
 	ResponseRaw   *http.Response // 指向 http.Response 的指针
 	RequestSource *Request       // 指向 Request 的指针
@@ -71,8 +73,8 @@ func (request *Request) newParseUrl(path string) (*url.URL, error) {
 
 // initQuery 方法用于初始化 Query 部分。
 func (request *Request) initQuery() {
-	request.client.Lock()
-	defer request.client.Unlock()
+	request.Lock()
+	defer request.Unlock()
 	if request.RequestRaw.Method == MethodGet {
 		// GET请求不需要设置Body,因为Body会被忽略
 		request.RequestRaw.URL.RawQuery = request.GetQueryParamsEncode()
@@ -112,7 +114,7 @@ func (request *Request) newDoResponse(rep *Response) (*Response, error) {
 	}
 	rep.ResponseRaw = responseRaw
 	defer func() {
-		request.client.Lock()
+		request.Lock()
 		defer request.client.Unlock()
 		var logText string
 		if rep.RequestSource.client.GetClientDebug() {
