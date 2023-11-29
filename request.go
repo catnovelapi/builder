@@ -10,12 +10,11 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"sort"
 	"strings"
-	"sync"
 )
 
 type Request struct {
-	sync.RWMutex
 	client      *Client       // 指向 Client 的指针
 	RequestRaw  *http.Request // 指向 http.Request 的指针
 	queryParams url.Values    // 用于存储 Query 参数的 url.Values
@@ -72,8 +71,8 @@ func (request *Request) setJsonBody(v interface{}) {
 // 如果成功设置了 body，方法会返回 Request 指针本身，以便进行链式调用。
 func (request *Request) SetBody(body interface{}) *Request {
 	// 加锁以确保线程安全
-	request.Lock()
-	defer request.Unlock()
+	request.client.Lock()
+	defer request.client.Unlock()
 
 	// 使用 type switch 来检查 body 的实际类型
 	switch v := body.(type) {
@@ -102,8 +101,8 @@ func (request *Request) SetBody(body interface{}) *Request {
 
 // SetHeader 方法用于设置 HTTP 请求的 Header 部分。它接收两个 string 类型的参数，
 func (request *Request) SetHeader(key, value string) *Request {
-	request.Lock()
-	defer request.Unlock()
+	request.client.Lock()
+	defer request.client.Unlock()
 	request.RequestRaw.Header.Set(key, value)
 	return request
 }
@@ -118,8 +117,8 @@ func (request *Request) SetCookies(cookie []*http.Cookie) *Request {
 
 // SetCookie 方法用于设置 HTTP 请求的 Cookie 部分。它接收一个 *http.Cookie 类型的参数，
 func (request *Request) SetCookie(cookie *http.Cookie) *Request {
-	request.Lock()
-	defer request.Unlock()
+	request.client.Lock()
+	defer request.client.Unlock()
 	request.RequestRaw.AddCookie(cookie)
 	return request
 }
@@ -134,8 +133,8 @@ func (request *Request) SetQueryParams(query map[string]interface{}) *Request {
 
 // SetQueryParam 方法用于设置 HTTP 请求的 Query 部分。它接收两个 string 类型的参数，
 func (request *Request) SetQueryParam(key string, value interface{}) *Request {
-	request.Lock()
-	defer request.Unlock()
+	request.client.Lock()
+	defer request.client.Unlock()
 	request.queryParams.Set(key, fmt.Sprintf("%v", value))
 	return request
 }
@@ -163,10 +162,31 @@ func (request *Request) SetContentType(contentType string) *Request {
 
 // GetQueryParamsEncode 方法用于获取 HTTP 请求的 Query 部分的 URL 编码字符串。
 func (request *Request) GetQueryParamsEncode() string {
-	request.Lock()
-	defer request.Unlock()
-	return request.GetQueryParams().Encode()
-
+	request.client.Lock()
+	defer request.client.Unlock()
+	v := request.GetQueryParams()
+	if v == nil {
+		return ""
+	}
+	var buf strings.Builder
+	keys := make([]string, 0, len(v))
+	for k := range v {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		vs := v[k]
+		keyEscaped := url.QueryEscape(k)
+		for _, v1 := range vs {
+			if buf.Len() > 0 {
+				buf.WriteByte('&')
+			}
+			buf.WriteString(keyEscaped)
+			buf.WriteByte('=')
+			buf.WriteString(url.QueryEscape(v1))
+		}
+	}
+	return buf.String()
 }
 
 // GetQueryParamsNopCloser 方法用于获取 HTTP 请求的 Query 部分的 ReadCloser。

@@ -14,7 +14,6 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
-	"sync"
 )
 
 const (
@@ -41,7 +40,6 @@ const (
 )
 
 type Response struct {
-	sync.RWMutex
 	Result        string         // 响应体字符串结果
 	ResponseRaw   *http.Response // 指向 http.Response 的指针
 	RequestSource *Request       // 指向 Request 的指针
@@ -49,8 +47,8 @@ type Response struct {
 
 // newParseUrl 方法用于解析 URL。它接收一个 string 类型的参数，该参数表示 HTTP 请求的 Path 部分。
 func (request *Request) newParseUrl(path string) (*url.URL, error) {
-	request.Lock()
-	defer request.Unlock()
+	request.client.Lock()
+	defer request.client.Unlock()
 	// 如果 baseUrl 不为空，且 path 不是以 / 开头，则在 path 前加上 /
 	if request.client.GetClientBaseURL() == "" && path == "" {
 		return nil, fmt.Errorf("request Error: %s", "baseUrl is empty")
@@ -109,8 +107,8 @@ func (request *Request) newDoResponse(rep *Response) (*Response, error) {
 	return rep, nil
 }
 func (response *Response) newLogFunc() {
-	response.Lock()
-	defer response.Unlock()
+	response.RequestSource.client.Lock()
+	defer response.RequestSource.client.Unlock()
 	var logText string
 	if response.RequestSource.client.GetClientDebug() {
 		logText = newLogger(response).CreateLogInfo()
