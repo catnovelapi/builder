@@ -50,8 +50,13 @@ func (request *Request) newParseUrl(path string) (*url.URL, error) {
 	request.client.Lock()
 	defer request.client.Unlock()
 	// 如果 baseUrl 不为空，且 path 不是以 / 开头，则在 path 前加上 /
-	if request.client.GetClientBaseURL() != "" && path[0] != '/' {
-		path = "/" + path
+	if request.client.GetClientBaseURL() == "" && path == "" {
+		return nil, fmt.Errorf("request Error: %s", "baseUrl is empty")
+	}
+	if request.client.GetClientBaseURL() != "" && path != "" {
+		if path[0] != '/' {
+			path = "/" + path
+		}
 	}
 	// 解析 URL, 如果失败则返回错误
 	u, err := url.Parse(request.client.GetClientBaseURL() + path)
