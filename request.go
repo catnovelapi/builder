@@ -3,11 +3,13 @@ package builder
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/tidwall/gjson"
 	"golang.org/x/net/context"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync"
 )
@@ -36,38 +38,57 @@ func (client *Client) R() *Request {
 	}
 }
 
+// SetBody 方法用于设置 HTTP 请求的 Body 和 ContentLength 部分。它接收一个 string 类型的参数，
+func (request *Request) setDataBody(v string) {
+	request.RequestRaw.ContentLength = int64(len(v))
+	request.RequestRaw.Body = io.NopCloser(strings.NewReader(v))
+}
+
+func (request *Request) toJsonString(v interface{}) (string, error) {
+	m, err := json.Marshal(v)
+	if err != nil {
+		return "", fmt.Errorf("toJsonString json.Marshal error: %s", err)
+	}
+	return string(m), nil
+
+}
+func (request *Request) setJsonBody(v interface{}) {
+	jsonString, err := request.toJsonString(v)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	if gjson.Valid(jsonString) {
+		request.setDataBody(jsonString)
+	} else {
+		log.Println("SetBody error:", jsonString)
+	}
+
+}
+
 // SetBody 方法用于设置 HTTP 请求的 Body 部分。它接收一个 interface{} 类型的参数，
 // 该参数可以是以下几种类型：string, []byte, map[string]interface{}, map[string]string,
-// map[string]int, map[string]int64, map[string]float64, map[string]float32, map[string]bool。
 // 对于不支持的类型，方法会设置 ContentLength 为 -1，并将 GetBody 方法设置为返回 nil。
 // 如果成功设置了 body，方法会返回 Request 指针本身，以便进行链式调用。
 func (request *Request) SetBody(body interface{}) *Request {
-	if body != nil {
-		// 加锁以确保线程安全
-		request.Lock()
-		defer request.Unlock()
+	// 加锁以确保线程安全
+	request.Lock()
+	defer request.Unlock()
 
-		// 使用 type switch 来检查 body 的实际类型
-		switch v := body.(type) {
-		case string: // 如果 body 是 string 类型
-			// 设置 ContentLength 为字符串的长度，并将字符串转换为 ReadCloser
-			request.RequestRaw.ContentLength = int64(len(v))
-			request.RequestRaw.Body = io.NopCloser(strings.NewReader(v))
-		case []byte: // 如果 body 是 []byte 类型
-			// 设置 ContentLength 为字节数组转换为字符串后的长度，并将字节数组转换为字符串后转换为 ReadCloser
-			request.RequestRaw.ContentLength = int64(len(string(v)))
-			request.RequestRaw.Body = io.NopCloser(strings.NewReader(string(v)))
-		case map[string]interface{}, map[string]string, map[string]int, map[string]int64, map[string]float64, map[string]float32, map[string]bool: // 如果 body 是 map 类型
-			// 尝试将 map 转换为 JSON 字符串
-			if m, err := json.Marshal(v); err != nil {
-				// 如果转换失败，打印错误信息
-				log.Println("SetBody json.Marshal error:", err)
-			} else {
-				// 如果转换成功，设置 ContentLength 为 JSON 字符串的长度，并将 JSON 字符串转换为 ReadCloser
-				request.RequestRaw.ContentLength = int64(len(string(m)))
-				request.RequestRaw.Body = io.NopCloser(strings.NewReader(string(m)))
-			}
-		default: // 对于其他类型
+	// 使用 type switch 来检查 body 的实际类型
+	switch v := body.(type) {
+	case string: // 如果 body 是 string 类型
+		request.setDataBody(v)
+	case []byte: // 如果 body 是 []byte 类型
+		request.setDataBody(string(v))
+	case map[string]interface{}, map[string]string: // 如果 body 是 map 类型
+		request.setJsonBody(v)
+	default: // 对于其他类型
+		if reflect.TypeOf(v).Kind() == reflect.Struct {
+			request.setJsonBody(&v)
+		} else if reflect.TypeOf(v).Kind() == reflect.Ptr {
+			request.setJsonBody(v)
+		} else {
 			// 设置 ContentLength 为 -1，并将 GetBody 方法设置为返回 nil
 			request.RequestRaw.ContentLength = -1
 			request.RequestRaw.GetBody = func() (io.ReadCloser, error) {
@@ -75,7 +96,6 @@ func (request *Request) SetBody(body interface{}) *Request {
 			}
 		}
 	}
-
 	// 返回 Request 指针本身，以便进行链式调用
 	return request
 }
