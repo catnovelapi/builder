@@ -50,6 +50,12 @@ func (client *Client) SetBaseURL(baseUrl string) *Client {
 	return client
 }
 
+// SetContentType 方法用于设置 HTTP 请求的 ContentType 部分。它接收一个 string 类型的参数，该参数表示 ContentType 的值。
+func (client *Client) SetContentType(contentType string) *Client {
+	client.headers.Set("Content-Type", contentType)
+	return client
+}
+
 // SetDebugFile 方法用于设置输出调试信息的文件。它接收一个 string 类型的参数，该参数表示文件名。
 func (client *Client) SetDebugFile(name string) *Client {
 	if fileInfo, err := os.Stat(name + ".txt"); err != nil {

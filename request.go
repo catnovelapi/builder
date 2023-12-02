@@ -160,12 +160,6 @@ func (request *Request) SetQueryString(query string) *Request {
 	return request
 }
 
-// SetContentType 方法用于设置 HTTP 请求的 Content-Type 部分。它接收一个 string 类型的参数，
-func (request *Request) SetContentType(contentType string) *Request {
-	request.SetHeader("Content-Type", contentType)
-	return request
-}
-
 // GetQueryParamsEncode 方法用于获取 HTTP 请求的 Query 部分的 URL 编码字符串。
 func (request *Request) GetQueryParamsEncode() string {
 	request.client.Lock()
@@ -212,11 +206,6 @@ func (request *Request) GetQueryParamsNopCloser() io.ReadCloser {
 // GetQueryParams 方法用于获取 HTTP 请求的 Query 部分的 url.Values。
 func (request *Request) GetQueryParams() url.Values {
 	return request.queryParams
-}
-
-// GetContentType 方法用于获取 HTTP 请求的 Content-Type 部分的字符串。
-func (request *Request) GetContentType() string {
-	return request.RequestRaw.Header.Get("Content-Type")
 }
 
 // GetHost 方法用于获取 HTTP 请求的 Host 部分的字符串。

@@ -80,9 +80,6 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 		request.RequestRaw.URL.RawQuery = request.GetQueryParamsEncode()
 	} else {
 		if len(request.queryParams) > 0 {
-			if request.GetContentType() == "" {
-				request.SetContentType("application/x-www-form-urlencoded")
-			}
 			request.RequestRaw.Body = request.GetQueryParamsNopCloser()
 		}
 	}
