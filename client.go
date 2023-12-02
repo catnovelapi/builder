@@ -51,8 +51,21 @@ func (client *Client) SetBaseURL(baseUrl string) *Client {
 }
 
 // SetDebugFile 方法用于设置输出调试信息的文件。它接收一个 string 类型的参数，该参数表示文件名。
-func (client *Client) SetDebugFile(logFileName string) *Client {
-	file, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+func (client *Client) SetDebugFile(name string) *Client {
+	if fileInfo, err := os.Stat(name + ".txt"); err != nil {
+		if !os.IsNotExist(err) {
+			// Other error occurred
+			log.Println(err)
+		}
+	} else {
+		if fileInfo.Size() > 1024*1024 {
+			newName := name + fileInfo.ModTime().Format("20060102") + ".txt"
+			if err = os.Rename(name+".txt", newName); err != nil {
+				log.Println(err)
+			}
+		}
+	}
+	file, err := os.OpenFile(name+".txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		log.Println("SetDebugFile error: ", err)
 	} else {
