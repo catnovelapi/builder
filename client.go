@@ -39,7 +39,7 @@ func NewClient() *Client {
 		},
 	}
 	client.SetTimeout(30)                 // 默认超时时间为 30 秒
-	client.SetRetryNumber(3)              // 默认重试次数为 3 次
+	client.SetRetryCount(3)               // 默认重试次数为 3 次
 	client.SetUserAgent(browser.Random()) // 默认 User-Agent 为随机生成的浏览器 User-Agent
 	return client
 }
@@ -97,8 +97,8 @@ func (client *Client) SetDebug() *Client {
 	return client
 }
 
-// SetRetryNumber 方法用于设置重试次数。它接收一个 int 类型的参数，该参数表示重试次数。
-func (client *Client) SetRetryNumber(num int) *Client {
+// SetRetryCount 方法用于设置重试次数。它接收一个 int 类型的参数，该参数表示重试次数。
+func (client *Client) SetRetryCount(num int) *Client {
 	if num <= 0 {
 		log.Println("retry number must be greater than 0")
 	} else {
