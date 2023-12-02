@@ -50,11 +50,16 @@ func (request *Request) newParseUrl(path string) (*url.URL, error) {
 	request.client.Lock()
 	defer request.client.Unlock()
 	// 如果 baseUrl 不为空，且 path 不是以 / 开头，则在 path 前加上 /
-	if request.client.baseUrl != "" && path[0] != '/' {
-		path = "/" + path
+	if request.client.GetClientBaseURL() == "" && path == "" {
+		return nil, fmt.Errorf("request Error: %s", "baseUrl is empty")
+	}
+	if request.client.GetClientBaseURL() != "" && path != "" {
+		if path[0] != '/' {
+			path = "/" + path
+		}
 	}
 	// 解析 URL, 如果失败则返回错误
-	u, err := url.Parse(request.client.baseUrl + path)
+	u, err := url.Parse(request.client.GetClientBaseURL() + path)
 	if err != nil {
 		return nil, err
 	}
@@ -64,30 +69,23 @@ func (request *Request) newParseUrl(path string) (*url.URL, error) {
 	return u, nil
 }
 
-// initQuery 方法用于初始化 Query 部分。
-func (request *Request) initQuery() {
-	request.client.Lock()
-	defer request.client.Unlock()
-	if request.RequestRaw.Method == MethodGet {
-		request.RequestRaw.URL.RawQuery = request.GetQueryParamsEncode()
-		return // GET请求不需要设置Body
-	}
-	if len(request.queryParams) > 0 {
-		if request.GetContentType() == "" {
-			request.SetContentType("application/x-www-form-urlencoded")
-		}
-		request.RequestRaw.Body = request.GetQueryParamsNopCloser()
-	}
-}
-
 // newResponse 方法用于创建一个 Response 对象。它接收两个 string 类型的参数，分别表示 HTTP 请求的方法和路径。
 func (request *Request) newResponse(method, path string) (*Response, error) {
 	_, err := request.newParseUrl(path)
 	if err != nil {
 		return nil, err
 	}
-	request.RequestRaw.Method = method
-	request.initQuery()
+	if request.RequestRaw.Method = method; request.RequestRaw.Method == MethodGet {
+		// GET请求不需要设置Body,因为Body会被忽略
+		request.RequestRaw.URL.RawQuery = request.GetQueryParamsEncode()
+	} else {
+		if len(request.queryParams) > 0 {
+			if request.GetContentType() == "" {
+				request.SetContentType("application/x-www-form-urlencoded")
+			}
+			request.RequestRaw.Body = request.GetQueryParamsNopCloser()
+		}
+	}
 	for i := 0; i < request.client.GetClientRetryNumber(); i++ {
 		if response, ok := request.newDoResponse(&Response{RequestSource: request}); ok != nil {
 			log.Println(fmt.Sprintf("%s Error: %s Retry:%v", request.RequestRaw.Method, ok.Error(), i))
@@ -105,22 +103,25 @@ func (request *Request) newDoResponse(rep *Response) (*Response, error) {
 		return nil, err
 	}
 	rep.ResponseRaw = responseRaw
-	defer func() {
-		request.client.Lock()
-		defer request.client.Unlock()
-		var logText string
-		if rep.RequestSource.client.GetClientDebug() {
-			logText = newLogger(rep).CreateLogInfo()
-			fmt.Println(logText)
-		}
-		if rep.RequestSource.client.debugFile != nil {
-			if logText == "" {
-				logText = newLogger(rep).CreateLogInfo()
-			}
-			_, _ = rep.RequestSource.client.debugFile.WriteString(logText)
-		}
-	}()
+	defer rep.newLogFunc()
 	return rep, nil
+}
+func (response *Response) newLogFunc() {
+	response.RequestSource.client.Lock()
+	defer response.RequestSource.client.Unlock()
+	var logText string
+	// 如果开启了 Debug 模式，则打印日志
+	if response.RequestSource.client.GetClientDebug() {
+		logText = NewLogger(response).CreateLogInfo()
+		fmt.Println(logText)
+	}
+	// 如果开启了 Debug 模式，并且设置了 DebugFile，则将日志写入文件
+	if response.RequestSource.client.debugFile != nil {
+		if logText == "" {
+			logText = NewLogger(response).CreateLogInfo()
+		}
+		_, _ = response.RequestSource.client.debugFile.WriteString(logText)
+	}
 }
 
 // Get 方法用于创建一个 GET 请求。它接收一个 string 类型的参数，表示 HTTP 请求的路径。

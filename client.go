@@ -15,23 +15,25 @@ import (
 
 // Client 类型用于存储 HTTP 请求的相关信息。
 type Client struct {
-	sync.Mutex
-	timeout     int          // timeout 用于存储 HTTP 请求的 Timeout 部分
-	retryNum    int          // retryNum 用于存储重试次数
-	baseUrl     string       // baseUrl 用于存储 HTTP 请求的 BaseUrl 部分
-	debug       bool         // debug 用于存储是否输出调试信息
-	debugFile   *os.File     // debugFile 用于存储调试信息的文件
-	clientRaw   *http.Client // clientRaw 用于存储 http.Client 的指针
-	headers     http.Header  // headers 用于存储 HTTP 请求的 Header 部分
-	queryParams url.Values   // queryParams 用于存储 HTTP 请求的 Query 部分
-	body        interface{}  // body 用于存储 HTTP 请求的 Body 部分
+	sync.RWMutex                // 用于保证线程安全
+	MaxConcurrent chan struct{} // 用于限制并发数
+	timeout       int           // timeout 用于存储 HTTP 请求的 Timeout 部分
+	retryNum      int           // retryNum 用于存储重试次数
+	baseUrl       string        // baseUrl 用于存储 HTTP 请求的 BaseUrl 部分
+	debug         bool          // debug 用于存储是否输出调试信息
+	debugFile     *os.File      // debugFile 用于存储调试信息的文件
+	clientRaw     *http.Client  // clientRaw 用于存储 http.Client 的指针
+	headers       http.Header   // headers 用于存储 HTTP 请求的 Header 部分
+	queryParams   url.Values    // queryParams 用于存储 HTTP 请求的 Query 部分
+	body          interface{}   // body 用于存储 HTTP 请求的 Body 部分
 }
 
 // NewClient 方法用于创建一个新的 Client 对象, 并返回该对象的指针。
 func NewClient() *Client {
 	client := &Client{
-		queryParams: make(url.Values),  // 初始化 queryParams
-		headers:     make(http.Header), // 初始化 headers
+		MaxConcurrent: make(chan struct{}, 500), // 用于限制并发数, 最大并发数为 500
+		queryParams:   make(url.Values),         // 初始化 queryParams
+		headers:       make(http.Header),        // 初始化 headers
 		clientRaw: &http.Client{
 			Transport: &http.Transport{}, // 初始化 Transport
 		},
@@ -196,8 +198,8 @@ func (client *Client) GetClientHeaders() http.Header {
 	return client.headers
 }
 
-// GetClientBaseUrl 方法用于获取 HTTP 请求的 BaseUrl 部分。它返回一个 string 类型的参数。
-func (client *Client) GetClientBaseUrl() string {
+// GetClientBaseURL 方法用于获取 HTTP 请求的 BaseUrl 部分。它返回一个 string 类型的参数。
+func (client *Client) GetClientBaseURL() string {
 	return client.baseUrl
 }
 
