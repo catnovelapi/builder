@@ -106,6 +106,12 @@ func (request *Request) SetHeader(key, value string) *Request {
 	request.RequestRaw.Header.Set(key, value)
 	return request
 }
+func (request *Request) SetHeaders(headers map[string]any) *Request {
+	for key, value := range headers {
+		request.SetHeader(key, fmt.Sprintf("%v", value))
+	}
+	return request
+}
 
 // SetCookies 方法用于设置 HTTP 请求的 Cookies 部分。它接收一个 []*http.Cookie 类型的参数，
 func (request *Request) SetCookies(cookie []*http.Cookie) *Request {

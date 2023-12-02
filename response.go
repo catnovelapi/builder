@@ -112,13 +112,13 @@ func (response *Response) newLogFunc() {
 	var logText string
 	// 如果开启了 Debug 模式，则打印日志
 	if response.RequestSource.client.GetClientDebug() {
-		logText = newLogger(response).CreateLogInfo()
+		logText = NewLogger(response).CreateLogInfo()
 		fmt.Println(logText)
 	}
 	// 如果开启了 Debug 模式，并且设置了 DebugFile，则将日志写入文件
 	if response.RequestSource.client.debugFile != nil {
 		if logText == "" {
-			logText = newLogger(response).CreateLogInfo()
+			logText = NewLogger(response).CreateLogInfo()
 		}
 		_, _ = response.RequestSource.client.debugFile.WriteString(logText)
 	}

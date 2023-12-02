@@ -59,28 +59,28 @@ func composeHeaders(hdrs http.Header) string {
 	return strings.Join(str, "\n")
 }
 
-type builderLoggerClient struct {
+type BuilderLoggerClient struct {
 	request       *Request
 	response      *Response
 	formatLogText string
 }
 
-// newLogger 方法用于创建一个 builderLoggerClient 对象。它接收一个 *Response 类型的参数，该参数表示 HTTP 响应。
-func newLogger(rep *Response) *builderLoggerClient {
-	return &builderLoggerClient{request: rep.RequestSource, response: rep}
+// NewLogger 方法用于创建一个 builderLoggerClient 对象。它接收一个 *Response 类型的参数，该参数表示 HTTP 响应。
+func NewLogger(rep *Response) *BuilderLoggerClient {
+	return &BuilderLoggerClient{request: rep.RequestSource, response: rep}
 }
 
 // CreateLogInfo 方法用于创建日志信息。
-func (builderLogger *builderLoggerClient) CreateLogInfo() string {
+func (builderLogger *BuilderLoggerClient) CreateLogInfo() string {
 	return builderLogger.formatRequestLogText() + builderLogger.formatResponseLogText()
 }
 
 // formatRequestLogText 方法用于格式化 HTTP 请求的日志信息。
-func (builderLogger *builderLoggerClient) formatRequestLogText() string {
+func (builderLogger *BuilderLoggerClient) formatRequestLogText() string {
 	var reqLogText string
 	var body string
-	if builderLogger.request.queryParams != nil {
-		body = builderLogger.request.queryParams.Encode()
+	if builderLogger.request.GetQueryParams() != nil {
+		body = builderLogger.request.GetQueryParamsEncode()
 	}
 	if body == "" {
 		if builderLogger.request.RequestRaw.Body != nil {
@@ -106,7 +106,7 @@ func (builderLogger *builderLoggerClient) formatRequestLogText() string {
 }
 
 // formatResponseLogText 方法用于格式化 HTTP 响应的日志信息。
-func (builderLogger *builderLoggerClient) formatResponseLogText() string {
+func (builderLogger *BuilderLoggerClient) formatResponseLogText() string {
 	var repLogText string
 	if cookies := builderLogger.response.GetCookies(); cookies != nil {
 		repLogText += "  Cookies:\n"
@@ -129,7 +129,7 @@ func (builderLogger *builderLoggerClient) formatResponseLogText() string {
 }
 
 // handleCookies 方法用于处理 Cookie。它接收一个 http.Header 类型的参数，该参数表示 HTTP 响应的 Header 部分。
-func (builderLogger *builderLoggerClient) handleCookies(rh http.Header) string {
+func (builderLogger *BuilderLoggerClient) handleCookies(rh http.Header) string {
 	var cookieText string
 	if builderLogger.request.RequestRaw.Cookies() != nil {
 		for _, cookie := range builderLogger.request.RequestRaw.Cookies() {
