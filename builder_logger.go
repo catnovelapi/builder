@@ -6,6 +6,7 @@ import (
 	"github.com/tidwall/gjson"
 	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 )
@@ -59,91 +60,80 @@ func composeHeaders(hdrs http.Header) string {
 	return strings.Join(str, "\n")
 }
 
-type BuilderLoggerClient struct {
-	request       *Request
-	response      *Response
-	formatLogText string
+type LoggerClient struct {
+	loggerArray []string
+	debugFile   *os.File
 }
 
-// NewLogger 方法用于创建一个 builderLoggerClient 对象。它接收一个 *Response 类型的参数，该参数表示 HTTP 响应。
-func NewLogger(rep *Response) *BuilderLoggerClient {
-	return &BuilderLoggerClient{request: rep.RequestSource, response: rep}
-}
-
-// CreateLogInfo 方法用于创建日志信息。
-func (builderLogger *BuilderLoggerClient) CreateLogInfo() string {
-	return builderLogger.formatRequestLogText() + builderLogger.formatResponseLogText()
+// NewLoggerClient 方法用于创建一个 LoggerClient 对象, 它接收一个 *os.File 类型的参数，该参数表示日志文件。
+func NewLoggerClient(debugFile *os.File) *LoggerClient {
+	return &LoggerClient{debugFile: debugFile}
 }
 
 // formatRequestLogText 方法用于格式化 HTTP 请求的日志信息。
-func (builderLogger *BuilderLoggerClient) formatRequestLogText() string {
-	var reqLogText string
+func (builderLogger *LoggerClient) formatRequestLogText(request *Request) {
 	var body string
-	if builderLogger.request.GetQueryParams() != nil {
-		body = builderLogger.request.GetQueryParamsEncode()
+	if request.GetQueryParams() != nil {
+		body = request.GetQueryParamsEncode()
 	}
 	if body == "" {
-		if builderLogger.request.RequestRaw.Body != nil {
-			body = fmt.Sprintf("%v", builderLogger.request.RequestRaw.Body)
+		if request.RequestRaw.Body != nil {
+			body = fmt.Sprintf("%v", request.RequestRaw.Body)
 		}
 	}
-	reqLogText = formatLog("\n==============================================================================\n"+
+	_, err := builderLogger.debugFile.WriteString(formatLog("\n==============================================================================\n"+
 		"~~~ REQUEST ~~~\n"+
 		"%s %s %s\n"+
 		"PATH   : %v\n"+
 		"HEADERS:\n%s\n"+
+		"Cookies:\n%v\n"+
 		"BODY   :\n%v\n"+
 		"------------------------------------------------------------------------------\n",
-		builderLogger.request.GetMethod(),
-		builderLogger.request.GetHost(),
-		builderLogger.request.GetProto(),
-		builderLogger.request.GetPath(),
-		composeHeaders(copyHeaders(builderLogger.request.GetRequestHeader())),
+		request.GetMethod(),
+		request.GetHost(),
+		request.GetProto(),
+		request.GetPath(),
+		composeHeaders(copyHeaders(request.GetRequestHeader())),
+		request.GetRequestHeader().Get("Cookies"),
 		body,
-	)
-
-	return reqLogText
+	))
+	if err != nil {
+		builderLogger.loggerArray = append(builderLogger.loggerArray, err.Error())
+	}
 }
 
 // formatResponseLogText 方法用于格式化 HTTP 响应的日志信息。
-func (builderLogger *BuilderLoggerClient) formatResponseLogText() string {
+func (builderLogger *LoggerClient) formatResponseLogText(response *Response) string {
 	var repLogText string
-	if cookies := builderLogger.response.GetCookies(); cookies != nil {
+	if cookies := response.GetCookies(); cookies != nil {
 		repLogText += "  Cookies:\n"
-		for _, cookie := range builderLogger.response.GetCookies() {
+		for _, cookie := range response.GetCookies() {
 			repLogText += fmt.Sprintf("    %s=%s", cookie.Name, cookie.Value)
 		}
 	}
-	repLogText += formatLog("\n\n"+
+	_, err := builderLogger.debugFile.WriteString(formatLog("\n\n"+
 		"~~~ RESPONSE ~~~\n"+
 		"Code   : %v\n"+
 		"Status : %s\n"+
 		"HEADERS:\n%s\n"+
 		"BODY   :\n%v\n"+
 		"------------------------------------------------------------------------------\n",
-		builderLogger.response.GetStatusCode(),
-		builderLogger.response.GetStatus(),
-		composeHeaders(builderLogger.response.GetHeader()),
-		indentJson(builderLogger.response.String()))
+		response.GetStatusCode(),
+		response.GetStatus(),
+		composeHeaders(response.GetHeader()),
+		indentJson(response.String())))
+	if err != nil {
+		builderLogger.loggerArray = append(builderLogger.loggerArray, err.Error())
+	}
 	return repLogText
 }
-
-// handleCookies 方法用于处理 Cookie。它接收一个 http.Header 类型的参数，该参数表示 HTTP 响应的 Header 部分。
-func (builderLogger *BuilderLoggerClient) handleCookies(rh http.Header) string {
-	var cookieText string
-	if builderLogger.request.RequestRaw.Cookies() != nil {
-		for _, cookie := range builderLogger.request.RequestRaw.Cookies() {
-			cookieText += fmt.Sprintf("%s=%s\n", cookie.Name, cookie.Value)
-		}
-	} else {
-		if rh.Get("Cookie") != "" {
-			for _, cookie := range rh["Cookie"] {
-				cookieText += fmt.Sprintf("%s\n", cookie)
-			}
-		}
-	}
-	return strings.TrimSpace(cookieText)
+func (builderLogger *LoggerClient) ReturnLog() []string {
+	return builderLogger.loggerArray
 }
+
+//func (builderLogger *LoggerClient) ResponseResultMiddleware(f func(result string) string) {
+//	f(builderLogger.response.String())
+//}
 
 // formatLog 方法用于格式化日志信息。它接收一个 string 类型的参数，该参数表示日志信息的格式，以及一个 interface{} 类型的可变参数，该参数表示日志信息的参数。
 func formatLog(format string, params ...interface{}) string {

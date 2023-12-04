@@ -21,7 +21,7 @@ type Client struct {
 	retryNum      int           // retryNum 用于存储重试次数
 	baseUrl       string        // baseUrl 用于存储 HTTP 请求的 BaseUrl 部分
 	debug         bool          // debug 用于存储是否输出调试信息
-	debugFile     *os.File      // debugFile 用于存储调试信息的文件
+	debugLoggers  *LoggerClient // debugLoggers 用于存储调试信息的文件
 	clientRaw     *http.Client  // clientRaw 用于存储 http.Client 的指针
 	headers       http.Header   // headers 用于存储 HTTP 请求的 Header 部分
 	queryParams   url.Values    // queryParams 用于存储 HTTP 请求的 Query 部分
@@ -60,7 +60,6 @@ func (client *Client) SetContentType(contentType string) *Client {
 func (client *Client) SetDebugFile(name string) *Client {
 	if fileInfo, err := os.Stat(name + ".txt"); err != nil {
 		if !os.IsNotExist(err) {
-			// Other error occurred
 			log.Println(err)
 		}
 	} else {
@@ -75,7 +74,8 @@ func (client *Client) SetDebugFile(name string) *Client {
 	if err != nil {
 		log.Println("SetDebugFile error: ", err)
 	} else {
-		client.debugFile = file
+		//client.debugFile = file
+		client.debugLoggers = NewLoggerClient(file)
 	}
 	return client
 }
@@ -225,11 +225,6 @@ func (client *Client) GetClientBaseURL() string {
 // GetClientDebug 方法用于获取 HTTP 请求的 Debug 部分。它返回一个 bool 类型的参数。
 func (client *Client) GetClientDebug() bool {
 	return client.debug
-}
-
-// GetClientDebugFile 方法用于获取 HTTP 请求的 DebugFile 部分。它返回一个 *os.File 类型的参数。
-func (client *Client) GetClientDebugFile() *os.File {
-	return client.debugFile
 }
 
 // GetClientRetryNumber 方法用于获取 HTTP 请求的 RetryNumber 部分。它返回一个 int 类型的参数。

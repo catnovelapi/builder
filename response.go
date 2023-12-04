@@ -83,42 +83,34 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 			request.RequestRaw.Body = request.GetQueryParamsNopCloser()
 		}
 	}
+	if request.client.GetClientDebug() {
+		request.client.debugLoggers.formatRequestLogText(request)
+	}
+	if request.client.GetClientRetryNumber() == 0 {
+		request.client.SetRetryCount(1)
+	}
 	for i := 0; i < request.client.GetClientRetryNumber(); i++ {
-		if response, ok := request.newDoResponse(&Response{RequestSource: request}); ok != nil {
+		response, ok := request.newDoResponse()
+		if ok != nil {
 			log.Println(fmt.Sprintf("%s Error: %s Retry:%v", request.RequestRaw.Method, ok.Error(), i))
-		} else {
-			return response, nil
+			continue
 		}
+		if request.client.GetClientDebug() {
+			request.client.debugLoggers.formatResponseLogText(response)
+		}
+		return response, nil
+
 	}
 	return nil, fmt.Errorf("request Error: %s", err.Error())
 }
 
 // newDoResponse 方法用于执行 HTTP 请求。它接收一个 Response 对象的指针，表示 HTTP 请求的响应。
-func (request *Request) newDoResponse(rep *Response) (*Response, error) {
-	responseRaw, err := rep.RequestSource.client.clientRaw.Do(rep.RequestSource.RequestRaw)
+func (request *Request) newDoResponse() (*Response, error) {
+	responseRaw, err := request.client.clientRaw.Do(request.RequestRaw)
 	if err != nil {
 		return nil, err
 	}
-	rep.ResponseRaw = responseRaw
-	defer rep.newLogFunc()
-	return rep, nil
-}
-func (response *Response) newLogFunc() {
-	response.RequestSource.client.Lock()
-	defer response.RequestSource.client.Unlock()
-	var logText string
-	// 如果开启了 Debug 模式，则打印日志
-	if response.RequestSource.client.GetClientDebug() {
-		logText = NewLogger(response).CreateLogInfo()
-		fmt.Println(logText)
-	}
-	// 如果开启了 Debug 模式，并且设置了 DebugFile，则将日志写入文件
-	if response.RequestSource.client.debugFile != nil {
-		if logText == "" {
-			logText = NewLogger(response).CreateLogInfo()
-		}
-		_, _ = response.RequestSource.client.debugFile.WriteString(logText)
-	}
+	return &Response{RequestSource: request, ResponseRaw: responseRaw}, nil
 }
 
 // Get 方法用于创建一个 GET 请求。它接收一个 string 类型的参数，表示 HTTP 请求的路径。
