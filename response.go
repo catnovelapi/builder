@@ -80,48 +80,39 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 		request.RequestRaw.URL.RawQuery = request.GetQueryParamsEncode()
 	} else {
 		if len(request.queryParams) > 0 {
-			if request.GetContentType() == "" {
-				request.SetContentType("application/x-www-form-urlencoded")
-			}
 			request.RequestRaw.Body = request.GetQueryParamsNopCloser()
 		}
 	}
-	for i := 0; i < request.client.GetClientRetryNumber(); i++ {
-		if response, ok := request.newDoResponse(&Response{RequestSource: request}); ok != nil {
-			log.Println(fmt.Sprintf("%s Error: %s Retry:%v", request.RequestRaw.Method, ok.Error(), i))
-		} else {
-			return response, nil
-		}
+	if request.client.GetClientDebug() {
+		request.client.debugLoggers.formatRequestLogText(request)
 	}
-	return nil, fmt.Errorf("request Error: %s", err.Error())
+	if request.client.GetClientRetryNumber() == 0 {
+		request.client.SetRetryCount(1)
+	}
+	response, ok := request.newDoResponse()
+	if ok != nil {
+		return nil, ok
+	}
+	if request.client.GetClientDebug() {
+		request.client.debugLoggers.formatResponseLogText(response)
+	}
+	return response, nil
+
 }
 
 // newDoResponse 方法用于执行 HTTP 请求。它接收一个 Response 对象的指针，表示 HTTP 请求的响应。
-func (request *Request) newDoResponse(rep *Response) (*Response, error) {
-	responseRaw, err := rep.RequestSource.client.clientRaw.Do(rep.RequestSource.RequestRaw)
-	if err != nil {
-		return nil, err
-	}
-	rep.ResponseRaw = responseRaw
-	defer rep.newLogFunc()
-	return rep, nil
-}
-func (response *Response) newLogFunc() {
-	response.RequestSource.client.Lock()
-	defer response.RequestSource.client.Unlock()
-	var logText string
-	// 如果开启了 Debug 模式，则打印日志
-	if response.RequestSource.client.GetClientDebug() {
-		logText = NewLogger(response).CreateLogInfo()
-		fmt.Println(logText)
-	}
-	// 如果开启了 Debug 模式，并且设置了 DebugFile，则将日志写入文件
-	if response.RequestSource.client.debugFile != nil {
-		if logText == "" {
-			logText = NewLogger(response).CreateLogInfo()
+func (request *Request) newDoResponse() (*Response, error) {
+	var err error
+	var raw *http.Response
+	for i := 0; i < request.client.GetClientRetryNumber(); i++ {
+		raw, err = request.client.clientRaw.Do(request.RequestRaw)
+		if err != nil {
+			log.Println(fmt.Sprintf("%s Error: %s Retry:%v", request.RequestRaw.Method, err.Error(), i))
+			continue
 		}
-		_, _ = response.RequestSource.client.debugFile.WriteString(logText)
+		return &Response{RequestSource: request, ResponseRaw: raw}, nil
 	}
+	return nil, fmt.Errorf("request Error: %s", err.Error())
 }
 
 // Get 方法用于创建一个 GET 请求。它接收一个 string 类型的参数，表示 HTTP 请求的路径。
@@ -172,6 +163,9 @@ func (response *Response) IsStatusOk() bool {
 func (response *Response) GetStatus() string {
 	return response.ResponseRaw.Status
 }
+func (response *Response) GetProto() string {
+	return response.ResponseRaw.Proto
+}
 
 // GetByte 方法用于获取 HTTP 响应的字节结果。
 func (response *Response) GetByte() []byte {
@@ -193,8 +187,15 @@ func (response *Response) GetByte() []byte {
 	if ok != nil {
 		return nil
 	}
-	response.Result = string(body)
-	return body
+	if response.RequestSource.client.setResultFunc != nil {
+		result, err := response.RequestSource.client.setResultFunc(string(body))
+		if err != nil {
+			response.Result = string(body)
+		} else {
+			response.Result = result
+		}
+	}
+	return []byte(response.Result)
 }
 
 // String 方法用于获取 HTTP 响应的字符串结果。

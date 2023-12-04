@@ -21,11 +21,12 @@ type Client struct {
 	retryNum      int           // retryNum 用于存储重试次数
 	baseUrl       string        // baseUrl 用于存储 HTTP 请求的 BaseUrl 部分
 	debug         bool          // debug 用于存储是否输出调试信息
-	debugFile     *os.File      // debugFile 用于存储调试信息的文件
+	debugLoggers  *LoggerClient // debugLoggers 用于存储调试信息的文件
 	clientRaw     *http.Client  // clientRaw 用于存储 http.Client 的指针
 	headers       http.Header   // headers 用于存储 HTTP 请求的 Header 部分
 	queryParams   url.Values    // queryParams 用于存储 HTTP 请求的 Query 部分
-	body          interface{}   // body 用于存储 HTTP 请求的 Body 部分
+	setResultFunc func(v string) (string, error)
+	body          interface{} // body 用于存储 HTTP 请求的 Body 部分
 }
 
 // NewClient 方法用于创建一个新的 Client 对象, 并返回该对象的指针。
@@ -39,7 +40,7 @@ func NewClient() *Client {
 		},
 	}
 	client.SetTimeout(30)                 // 默认超时时间为 30 秒
-	client.SetRetryNumber(3)              // 默认重试次数为 3 次
+	client.SetRetryCount(3)               // 默认重试次数为 3 次
 	client.SetUserAgent(browser.Random()) // 默认 User-Agent 为随机生成的浏览器 User-Agent
 	return client
 }
@@ -50,13 +51,32 @@ func (client *Client) SetBaseURL(baseUrl string) *Client {
 	return client
 }
 
+// SetContentType 方法用于设置 HTTP 请求的 ContentType 部分。它接收一个 string 类型的参数，该参数表示 ContentType 的值。
+func (client *Client) SetContentType(contentType string) *Client {
+	client.headers.Set("Content-Type", contentType)
+	return client
+}
+
 // SetDebugFile 方法用于设置输出调试信息的文件。它接收一个 string 类型的参数，该参数表示文件名。
-func (client *Client) SetDebugFile(logFileName string) *Client {
-	file, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+func (client *Client) SetDebugFile(name string) *Client {
+	if fileInfo, err := os.Stat(name + ".txt"); err != nil {
+		if !os.IsNotExist(err) {
+			log.Println(err)
+		}
+	} else {
+		if fileInfo.Size() > 1024*1024 {
+			newName := name + fileInfo.ModTime().Format("20060102") + ".txt"
+			if err = os.Rename(name+".txt", newName); err != nil {
+				log.Println(err)
+			}
+		}
+	}
+	file, err := os.OpenFile(name+".txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		log.Println("SetDebugFile error: ", err)
 	} else {
-		client.debugFile = file
+		//client.debugFile = file
+		client.debugLoggers = NewLoggerClient(file)
 	}
 	return client
 }
@@ -78,14 +98,19 @@ func (client *Client) SetCookieJar(cookieJar http.CookieJar) *Client {
 	return client
 }
 
+func (client *Client) SetResultFunc(f func(v string) (string, error)) *Client {
+	client.setResultFunc = f
+	return client
+}
+
 // SetDebug 方法用于设置是否输出调试信息,如果调用该方法，那么将输出调试信息。
 func (client *Client) SetDebug() *Client {
 	client.debug = true
 	return client
 }
 
-// SetRetryNumber 方法用于设置重试次数。它接收一个 int 类型的参数，该参数表示重试次数。
-func (client *Client) SetRetryNumber(num int) *Client {
+// SetRetryCount 方法用于设置重试次数。它接收一个 int 类型的参数，该参数表示重试次数。
+func (client *Client) SetRetryCount(num int) *Client {
 	if num <= 0 {
 		log.Println("retry number must be greater than 0")
 	} else {
@@ -206,11 +231,6 @@ func (client *Client) GetClientBaseURL() string {
 // GetClientDebug 方法用于获取 HTTP 请求的 Debug 部分。它返回一个 bool 类型的参数。
 func (client *Client) GetClientDebug() bool {
 	return client.debug
-}
-
-// GetClientDebugFile 方法用于获取 HTTP 请求的 DebugFile 部分。它返回一个 *os.File 类型的参数。
-func (client *Client) GetClientDebugFile() *os.File {
-	return client.debugFile
 }
 
 // GetClientRetryNumber 方法用于获取 HTTP 请求的 RetryNumber 部分。它返回一个 int 类型的参数。
