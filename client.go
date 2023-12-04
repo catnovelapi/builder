@@ -25,7 +25,8 @@ type Client struct {
 	clientRaw     *http.Client  // clientRaw 用于存储 http.Client 的指针
 	headers       http.Header   // headers 用于存储 HTTP 请求的 Header 部分
 	queryParams   url.Values    // queryParams 用于存储 HTTP 请求的 Query 部分
-	body          interface{}   // body 用于存储 HTTP 请求的 Body 部分
+	setResultFunc func(v string) (string, error)
+	body          interface{} // body 用于存储 HTTP 请求的 Body 部分
 }
 
 // NewClient 方法用于创建一个新的 Client 对象, 并返回该对象的指针。
@@ -94,6 +95,11 @@ func (client *Client) SetCookie(cookie string) *Client {
 // SetCookieJar 方法用于设置 HTTP 请求的 CookieJar 部分。它接收一个 http.CookieJar 类型的参数，该参数表示 CookieJar 的值。
 func (client *Client) SetCookieJar(cookieJar http.CookieJar) *Client {
 	client.clientRaw.Jar = cookieJar
+	return client
+}
+
+func (client *Client) SetResultFunc(f func(v string) (string, error)) *Client {
+	client.setResultFunc = f
 	return client
 }
 

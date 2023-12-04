@@ -89,28 +89,30 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 	if request.client.GetClientRetryNumber() == 0 {
 		request.client.SetRetryCount(1)
 	}
-	for i := 0; i < request.client.GetClientRetryNumber(); i++ {
-		response, ok := request.newDoResponse()
-		if ok != nil {
-			log.Println(fmt.Sprintf("%s Error: %s Retry:%v", request.RequestRaw.Method, ok.Error(), i))
-			continue
-		}
-		if request.client.GetClientDebug() {
-			request.client.debugLoggers.formatResponseLogText(response)
-		}
-		return response, nil
-
+	response, ok := request.newDoResponse()
+	if ok != nil {
+		return nil, ok
 	}
-	return nil, fmt.Errorf("request Error: %s", err.Error())
+	if request.client.GetClientDebug() {
+		request.client.debugLoggers.formatResponseLogText(response)
+	}
+	return response, nil
+
 }
 
 // newDoResponse 方法用于执行 HTTP 请求。它接收一个 Response 对象的指针，表示 HTTP 请求的响应。
 func (request *Request) newDoResponse() (*Response, error) {
-	responseRaw, err := request.client.clientRaw.Do(request.RequestRaw)
-	if err != nil {
-		return nil, err
+	var err error
+	var raw *http.Response
+	for i := 0; i < request.client.GetClientRetryNumber(); i++ {
+		raw, err = request.client.clientRaw.Do(request.RequestRaw)
+		if err != nil {
+			log.Println(fmt.Sprintf("%s Error: %s Retry:%v", request.RequestRaw.Method, err.Error(), i))
+			continue
+		}
+		return &Response{RequestSource: request, ResponseRaw: raw}, nil
 	}
-	return &Response{RequestSource: request, ResponseRaw: responseRaw}, nil
+	return nil, fmt.Errorf("request Error: %s", err.Error())
 }
 
 // Get 方法用于创建一个 GET 请求。它接收一个 string 类型的参数，表示 HTTP 请求的路径。
@@ -161,6 +163,9 @@ func (response *Response) IsStatusOk() bool {
 func (response *Response) GetStatus() string {
 	return response.ResponseRaw.Status
 }
+func (response *Response) GetProto() string {
+	return response.ResponseRaw.Proto
+}
 
 // GetByte 方法用于获取 HTTP 响应的字节结果。
 func (response *Response) GetByte() []byte {
@@ -182,8 +187,15 @@ func (response *Response) GetByte() []byte {
 	if ok != nil {
 		return nil
 	}
-	response.Result = string(body)
-	return body
+	if response.RequestSource.client.setResultFunc != nil {
+		result, err := response.RequestSource.client.setResultFunc(string(body))
+		if err != nil {
+			response.Result = string(body)
+		} else {
+			response.Result = result
+		}
+	}
+	return []byte(response.Result)
 }
 
 // String 方法用于获取 HTTP 响应的字符串结果。
