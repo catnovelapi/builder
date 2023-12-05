@@ -71,7 +71,7 @@ func NewLoggerClient(debugFile *os.File) *LoggerClient {
 }
 
 // formatRequestLogText 方法用于格式化 HTTP 请求的日志信息。
-func (builderLogger *LoggerClient) formatRequestLogText(request *Request) {
+func (builderLogger *LoggerClient) formatRequestLogText(debug bool, request *Request) {
 	var body string
 	if request.GetQueryParams() != nil {
 		body = request.GetQueryParamsEncode()
@@ -81,7 +81,7 @@ func (builderLogger *LoggerClient) formatRequestLogText(request *Request) {
 			body = fmt.Sprintf("%v", request.RequestRaw.Body)
 		}
 	}
-	_, err := builderLogger.debugFile.WriteString(formatLog("\n==============================================================================\n"+
+	formatText := formatLog("\n==============================================================================\n"+
 		"~~~ REQUEST ~~~\n"+
 		"%s %s %s\n"+
 		"PATH   : %v\n"+
@@ -96,14 +96,19 @@ func (builderLogger *LoggerClient) formatRequestLogText(request *Request) {
 		composeHeaders(copyHeaders(request.GetRequestHeader())),
 		request.GetRequestHeader().Get("Cookies"),
 		body,
-	))
-	if err != nil {
-		builderLogger.loggerArray = append(builderLogger.loggerArray, err.Error())
+	)
+	if debug {
+		fmt.Println(formatText)
+	}
+	if builderLogger.debugFile != nil {
+		if _, err := builderLogger.debugFile.WriteString(formatText); err != nil {
+			builderLogger.loggerArray = append(builderLogger.loggerArray, err.Error())
+		}
 	}
 }
 
 // formatResponseLogText 方法用于格式化 HTTP 响应的日志信息。
-func (builderLogger *LoggerClient) formatResponseLogText(response *Response) string {
+func (builderLogger *LoggerClient) formatResponseLogText(debug bool, response *Response) string {
 	var repLogText string
 	if cookies := response.GetCookies(); cookies != nil {
 		repLogText += "  Cookies:\n"
@@ -111,7 +116,7 @@ func (builderLogger *LoggerClient) formatResponseLogText(response *Response) str
 			repLogText += fmt.Sprintf("    %s=%s", cookie.Name, cookie.Value)
 		}
 	}
-	_, err := builderLogger.debugFile.WriteString(formatLog("\n\n"+
+	formatText := formatLog("\n\n"+
 		"~~~ RESPONSE ~~~\n"+
 		"Code   : %v\n"+
 		"Status : %s\n"+
@@ -121,9 +126,14 @@ func (builderLogger *LoggerClient) formatResponseLogText(response *Response) str
 		response.GetStatusCode(),
 		response.GetStatus(),
 		composeHeaders(response.GetHeader()),
-		indentJson(response.String())))
-	if err != nil {
-		builderLogger.loggerArray = append(builderLogger.loggerArray, err.Error())
+		indentJson(response.String()))
+	if debug {
+		fmt.Println(formatText)
+	}
+	if builderLogger.debugFile != nil {
+		if _, err := builderLogger.debugFile.WriteString(formatText); err != nil {
+			builderLogger.loggerArray = append(builderLogger.loggerArray, err.Error())
+		}
 	}
 	return repLogText
 }
