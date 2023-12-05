@@ -53,7 +53,6 @@ func (request *Request) SetJsonBody(v interface{}) {
 		request.RequestRaw.ContentLength = int64(len(jsonString))
 		request.RequestRaw.Body = io.NopCloser(strings.NewReader(jsonString))
 	}
-
 }
 
 // SetHeader 方法用于设置 HTTP 请求的 Header 部分。它接收两个 string 类型的参数，

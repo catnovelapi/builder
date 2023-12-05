@@ -90,6 +90,7 @@ func NewClient() *Client {
 		XMLMarshal:             xml.Marshal,
 		XMLUnmarshal:           xml.Unmarshal,
 		HeaderAuthorizationKey: http.CanonicalHeaderKey("Authorization"),
+		AuthScheme:             "Bearer",
 		httpClientRaw:          &http.Client{Jar: cookieJar},
 	}
 
@@ -285,7 +286,12 @@ func (client *Client) SetTimeout(timeout int) *Client {
 
 // SetBasicAuth 方法用于设置 HTTP 请求的 BasicAuth 部分。它接收两个 string 类型的参数，分别表示用户名和密码。
 func (client *Client) SetBasicAuth(username, password string) *Client {
-	auth := username + ":" + password
-	client.SetHeader("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
+	client.SetAuthorizationKey(client.AuthScheme + base64.StdEncoding.EncodeToString([]byte(username+":"+password)))
+	return client
+}
+
+// SetAuthorizationKey 方法用于设置 HTTP 请求的 Authorization 部分。它接收一个 string 类型的参数，该参数表示 Authorization 的值。
+func (client *Client) SetAuthorizationKey(authToken string) *Client {
+	client.SetHeader(client.HeaderAuthorizationKey, authToken)
 	return client
 }
