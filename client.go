@@ -145,7 +145,7 @@ func (client *Client) SetDebugFile(name string) *Client {
 func (client *Client) R() *Request {
 	req := &Request{
 		client:     client,
-		QueryParam: client.GetClientQueryParams(),
+		QueryParam: client.QueryParam,
 		RequestRaw: &http.Request{
 			//Body:       rc,
 			//URL:        u,
@@ -154,9 +154,8 @@ func (client *Client) R() *Request {
 			ProtoMinor: 1,
 			Header:     client.GetClientHeaders(),
 		},
-		FormData: url.Values{},
-		Header:   http.Header{},
-		Cookies:  make([]*http.Cookie, 0),
+		FormData: client.FormData,
+		Cookies:  client.Cookies,
 	}
 	req.RequestRaw.WithContext(context.Background())
 	return req

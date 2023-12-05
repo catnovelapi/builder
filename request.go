@@ -18,7 +18,6 @@ type Request struct {
 	RequestRaw *http.Request // 指向 http.Request 的指针
 	QueryParam url.Values    // 用于存储 Query 参数的 url.Values
 	FormData   url.Values    // 用于存储 Form 参数的 url.Values
-	Header     http.Header   // 用于存储 Header 的 http.Header
 	Cookies    []*http.Cookie
 }
 
@@ -129,16 +128,24 @@ func (request *Request) SetQueryParam(key string, value interface{}) *Request {
 	request.QueryParam.Set(key, fmt.Sprintf("%v", value))
 	return request
 }
+func (request *Request) SetFormData(key, value string) *Request {
+	request.client.Lock()
+	defer request.client.Unlock()
+	request.FormData.Set(key, value)
+	return request
+}
+func (request *Request) SetFormDataMany(params url.Values) *Request {
+	for key, value := range params {
+		request.SetFormData(key, value[0])
+	}
+	return request
+}
 
 // SetQueryString 方法用于设置 HTTP 请求的 Query 部分。它接收一个 string 类型的参数，
 func (request *Request) SetQueryString(query string) *Request {
 	params, err := url.ParseQuery(strings.TrimSpace(query))
 	if err == nil {
-		for p, v := range params {
-			for _, pv := range v {
-				request.SetQueryParam(p, pv)
-			}
-		}
+		request.SetFormDataMany(params)
 	} else {
 		log.Println("SetQueryString url.ParseQuery error:", err)
 	}
