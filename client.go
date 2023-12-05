@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"github.com/EDDYCJY/fake-useragent"
+	"golang.org/x/net/context"
 	"golang.org/x/net/publicsuffix"
 	"log"
 	"net"
@@ -49,11 +50,10 @@ type Client struct {
 	debug                  bool          // debug 用于存储是否输出调试信息
 	debugLoggers           *LoggerClient // debugLoggers 用于存储调试信息的文件
 	httpClientRaw          *http.Client  // httpClientRaw 用于存储 http.Client 的指针
-	headers                http.Header   // headers 用于存储 HTTP 请求的 Header 部分
+	Header                 http.Header   // Header 用于存储 HTTP 请求的 Header 部分
 	QueryParam             url.Values    // QueryParam 用于存储 HTTP 请求的 Query 部分
 	setResultFunc          func(v string) (string, error)
 	FormData               url.Values
-	Header                 http.Header
 	Token                  string
 	AuthScheme             string
 	Cookies                []*http.Cookie
@@ -62,7 +62,6 @@ type Client struct {
 	AllowGetMethodPayload  bool
 	RetryCount             int
 	RetryWaitTime          time.Duration
-	RetryMaxWaitTime       time.Duration
 	JSONMarshal            func(v interface{}) ([]byte, error)
 	JSONUnmarshal          func(data []byte, v interface{}) error
 	XMLMarshal             func(v interface{}) ([]byte, error)
@@ -72,26 +71,20 @@ type Client struct {
 }
 
 const (
-	defaultRetryCount  = 3
-	defaultWaitTime    = time.Duration(100) * time.Millisecond
-	defaultMaxWaitTime = time.Duration(2000) * time.Millisecond
+	defaultRetryCount = 3
+	defaultWaitTime   = 100
 )
 
 // NewClient 方法用于创建一个新的 Client 对象, 并返回该对象的指针。
 func NewClient() *Client {
-	cookieJar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
-	if err != nil {
-		log.Println("NewClient cookiejar.New error:", err)
-	}
+	cookieJar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	client := &Client{
 		MaxConcurrent:          make(chan struct{}, 500), // 用于限制并发数, 最大并发数为 500
 		QueryParam:             make(url.Values),         // 初始化 QueryParam
-		headers:                make(http.Header),        // 初始化 headers
+		Header:                 make(http.Header),        // 初始化 Header
 		FormData:               url.Values{},
-		Header:                 http.Header{},
 		Cookies:                make([]*http.Cookie, 0),
 		RetryWaitTime:          defaultWaitTime,
-		RetryMaxWaitTime:       defaultMaxWaitTime,
 		JSONMarshal:            json.Marshal,
 		JSONUnmarshal:          json.Unmarshal,
 		XMLMarshal:             xml.Marshal,
@@ -120,7 +113,7 @@ func (client *Client) SetBaseURL(baseUrl string) *Client {
 
 // SetContentType 方法用于设置 HTTP 请求的 ContentType 部分。它接收一个 string 类型的参数，该参数表示 ContentType 的值。
 func (client *Client) SetContentType(contentType string) *Client {
-	client.headers.Set("Content-Type", contentType)
+	client.Header.Set("Content-Type", contentType)
 	return client
 }
 
@@ -148,13 +141,34 @@ func (client *Client) SetDebugFile(name string) *Client {
 	return client
 }
 
+// R 方法用于创建一个新的 Request 对象。它接收一个 string 类型的参数，该参数表示 HTTP 请求的 Path 部分。
+func (client *Client) R() *Request {
+	req := &Request{
+		client:     client,
+		QueryParam: client.GetClientQueryParams(),
+		RequestRaw: &http.Request{
+			//Body:       rc,
+			//URL:        u,
+			Proto:      "HTTP/1.1",
+			ProtoMajor: 1,
+			ProtoMinor: 1,
+			Header:     client.GetClientHeaders(),
+		},
+		FormData: url.Values{},
+		Header:   http.Header{},
+		Cookies:  make([]*http.Cookie, 0),
+	}
+	req.RequestRaw.WithContext(context.Background())
+	return req
+}
+
 // SetCookie 方法用于设置 HTTP 请求的 Cookie 部分。它接收一个 string 类型的参数，该参数表示 Cookie 的值。
 func (client *Client) SetCookie(cookie string) *Client {
-	if client.headers.Get("Cookie") != "" {
+	if client.Header.Get("Cookie") != "" {
 		// 如果已经设置了 Cookie，那么将新的 Cookie 追加到原有的 Cookie 后面
-		client.headers.Set("Cookie", client.headers.Get("Cookie")+";"+cookie)
+		client.Header.Set("Cookie", client.Header.Get("Cookie")+";"+cookie)
 	} else {
-		client.headers.Set("Cookie", cookie)
+		client.Header.Set("Cookie", cookie)
 	}
 	return client
 }
@@ -188,8 +202,8 @@ func (client *Client) SetRetryCount(retryCount int) *Client {
 
 // SetHeader 方法用于设置 HTTP 请求的 Header 部分。它接收两个 string 类型的参数，
 func (client *Client) SetHeader(key string, value interface{}) *Client {
-	// 将 value 转换为 string 类型, 并将其存储到 headers 中
-	client.headers.Set(key, fmt.Sprintf("%v", value))
+	// 将 value 转换为 string 类型, 并将其存储到 Header 中
+	client.Header.Set(key, fmt.Sprintf("%v", value))
 	return client
 }
 
@@ -223,11 +237,15 @@ func (client *Client) SetQueryParams(params map[string]any) *Client {
 	return client
 }
 
-// SetFormDataQueryParams 方法用于设置 HTTP 请求的 Query 部分。它接收一个 url.Values 类型的参数，
-func (client *Client) SetFormDataQueryParams(params url.Values) *Client {
+// SetFormDataMany 方法用于设置 HTTP 请求的 Query 部分。它接收一个 url.Values 类型的参数，
+func (client *Client) SetFormDataMany(params url.Values) *Client {
 	for key, value := range params {
-		client.SetQueryParam(key, value)
+		client.SetFormData(key, value[0])
 	}
+	return client
+}
+func (client *Client) SetFormData(key, value string) *Client {
+	client.FormData.Add(key, value)
 	return client
 }
 
@@ -237,7 +255,7 @@ func (client *Client) SetQueryParamString(query string) *Client {
 	params, err := url.ParseQuery(strings.TrimSpace(query))
 	if err == nil {
 		// 将 params 中的参数存储到 QueryParam 中
-		client.SetFormDataQueryParams(params)
+		client.SetFormDataMany(params)
 	} else {
 		log.Println("SetQueryString url.ParseQuery error:", err)
 	}
@@ -268,49 +286,4 @@ func (client *Client) SetBasicAuth(username, password string) *Client {
 	auth := username + ":" + password
 	client.SetHeader("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
 	return client
-}
-
-// GetClientQueryParams 方法用于获取 HTTP 请求的 Query 部分。它返回一个 url.Values 类型的参数。
-func (client *Client) GetClientQueryParams() url.Values {
-	return client.QueryParam
-}
-
-// GetClientBody 方法用于获取 HTTP 请求的 Body 部分。它返回一个 interface{} 类型的参数。
-func (client *Client) GetClientBody() interface{} {
-	return client.body
-}
-
-// GetClientQueryParamsEncode 方法用于获取 HTTP 请求的 Query 部分。它返回一个 Encode 后的 string 类型的参数。
-func (client *Client) GetClientQueryParamsEncode() string {
-	return client.QueryParam.Encode()
-}
-
-// GetClientHeaders 方法用于获取 HTTP 请求的 Header 部分。它返回一个 http.Header 类型的参数。
-func (client *Client) GetClientHeaders() http.Header {
-	return client.headers
-}
-
-// GetClientBaseURL 方法用于获取 HTTP 请求的 BaseUrl 部分。它返回一个 string 类型的参数。
-func (client *Client) GetClientBaseURL() string {
-	return client.baseUrl
-}
-
-// GetClientDebug 方法用于获取 HTTP 请求的 Debug 部分。它返回一个 bool 类型的参数。
-func (client *Client) GetClientDebug() bool {
-	return client.debug
-}
-
-// GetClientRetryNumber 方法用于获取 HTTP 请求的 RetryNumber 部分。它返回一个 int 类型的参数。
-func (client *Client) GetClientRetryNumber() int {
-	return client.RetryCount
-}
-
-// GetClientTimeout 方法用于获取 HTTP 请求的 Timeout 部分。它返回一个 int 类型的参数。
-func (client *Client) GetClientTimeout() int {
-	return client.timeout
-}
-
-// GetClientCookie 方法用于获取 HTTP 请求的 Cookie 部分。它返回一个 string 类型的参数。
-func (client *Client) GetClientCookie() string {
-	return client.headers.Get("Cookie")
 }

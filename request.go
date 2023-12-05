@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/tidwall/gjson"
-	"golang.org/x/net/context"
 	"io"
 	"log"
 	"net/http"
@@ -15,26 +14,12 @@ import (
 )
 
 type Request struct {
-	client      *Client       // 指向 Client 的指针
-	RequestRaw  *http.Request // 指向 http.Request 的指针
-	queryParams url.Values    // 用于存储 Query 参数的 url.Values
-}
-
-// R 方法用于创建一个新的 Request 对象。它接收一个 string 类型的参数，该参数表示 HTTP 请求的 Path 部分。
-func (client *Client) R() *Request {
-	req := &http.Request{
-		//Body:       rc,
-		//URL:        u,
-		Proto:      "HTTP/1.1",
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		Header:     client.GetClientHeaders(),
-	}
-	return &Request{
-		client:      client,
-		queryParams: client.GetClientQueryParams(),
-		RequestRaw:  req.WithContext(context.Background()),
-	}
+	client     *Client       // 指向 Client 的指针
+	RequestRaw *http.Request // 指向 http.Request 的指针
+	QueryParam url.Values    // 用于存储 Query 参数的 url.Values
+	FormData   url.Values    // 用于存储 Form 参数的 url.Values
+	Header     http.Header   // 用于存储 Header 的 http.Header
+	Cookies    []*http.Cookie
 }
 
 // SetBody 方法用于设置 HTTP 请求的 Body 和 ContentLength 部分。它接收一个 string 类型的参数，
@@ -141,7 +126,7 @@ func (request *Request) SetQueryParams(query map[string]interface{}) *Request {
 func (request *Request) SetQueryParam(key string, value interface{}) *Request {
 	request.client.Lock()
 	defer request.client.Unlock()
-	request.queryParams.Set(key, fmt.Sprintf("%v", value))
+	request.QueryParam.Set(key, fmt.Sprintf("%v", value))
 	return request
 }
 
@@ -205,7 +190,7 @@ func (request *Request) GetQueryParamsNopCloser() io.ReadCloser {
 
 // GetQueryParams 方法用于获取 HTTP 请求的 Query 部分的 url.Values。
 func (request *Request) GetQueryParams() url.Values {
-	return request.queryParams
+	return request.QueryParam
 }
 
 // GetHost 方法用于获取 HTTP 请求的 Host 部分的字符串。

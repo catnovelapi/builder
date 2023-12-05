@@ -79,7 +79,7 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 		// GET请求不需要设置Body,因为Body会被忽略
 		request.RequestRaw.URL.RawQuery = request.GetQueryParamsEncode()
 	} else {
-		if len(request.queryParams) > 0 {
+		if len(request.QueryParam) > 0 {
 			request.RequestRaw.Body = request.GetQueryParamsNopCloser()
 		}
 	}
