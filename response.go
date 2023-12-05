@@ -84,7 +84,7 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 		}
 	}
 	if request.client.GetClientDebug() {
-		request.client.debugLoggers.formatRequestLogText(request)
+		request.client.debugLoggers.formatRequestLogText(request.client.GetClientDebug(), request)
 	}
 	if request.client.GetClientRetryNumber() == 0 {
 		request.client.SetRetryCount(1)
@@ -94,7 +94,7 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 		return nil, ok
 	}
 	if request.client.GetClientDebug() {
-		request.client.debugLoggers.formatResponseLogText(response)
+		request.client.debugLoggers.formatResponseLogText(request.client.GetClientDebug(), response)
 	}
 	return response, nil
 
@@ -194,6 +194,8 @@ func (response *Response) GetByte() []byte {
 		} else {
 			response.Result = result
 		}
+	} else {
+		response.Result = string(body)
 	}
 	return []byte(response.Result)
 }
