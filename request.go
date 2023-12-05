@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/tidwall/gjson"
 	"io"
@@ -21,66 +20,40 @@ type Request struct {
 	Cookies    []*http.Cookie
 }
 
-// SetBody 方法用于设置 HTTP 请求的 Body 和 ContentLength 部分。它接收一个 string 类型的参数，
-func (request *Request) setDataBody(v string) {
-	request.RequestRaw.ContentLength = int64(len(v))
-	request.RequestRaw.Body = io.NopCloser(strings.NewReader(v))
-}
-
-func (request *Request) toJsonString(v interface{}) (string, error) {
-	m, err := json.Marshal(v)
-	if err != nil {
-		return "", fmt.Errorf("toJsonString json.Marshal error: %s", err)
-	}
-	return string(m), nil
-
-}
-func (request *Request) setJsonBody(v interface{}) {
-	jsonString, err := request.toJsonString(v)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	if gjson.Valid(jsonString) {
-		request.setDataBody(jsonString)
-	} else {
-		log.Println("SetBody error:", jsonString)
-	}
-
-}
-
-// SetBody 方法用于设置 HTTP 请求的 Body 部分。它接收一个 interface{} 类型的参数，
-// 该参数可以是以下几种类型：string, []byte, map[string]interface{}, map[string]string,
-// 对于不支持的类型，方法会设置 ContentLength 为 -1，并将 GetBody 方法设置为返回 nil。
-// 如果成功设置了 body，方法会返回 Request 指针本身，以便进行链式调用。
-func (request *Request) SetBody(body interface{}) *Request {
-	// 加锁以确保线程安全
-	request.client.Lock()
-	defer request.client.Unlock()
-
-	// 使用 type switch 来检查 body 的实际类型
-	switch v := body.(type) {
-	case string: // 如果 body 是 string 类型
-		request.setDataBody(v)
-	case []byte: // 如果 body 是 []byte 类型
-		request.setDataBody(string(v))
-	case map[string]interface{}, map[string]string: // 如果 body 是 map 类型
-		request.setJsonBody(v)
-	default: // 对于其他类型
-		if reflect.TypeOf(v).Kind() == reflect.Struct {
-			request.setJsonBody(&v)
-		} else if reflect.TypeOf(v).Kind() == reflect.Ptr {
-			request.setJsonBody(v)
-		} else {
-			// 设置 ContentLength 为 -1，并将 GetBody 方法设置为返回 nil
-			request.RequestRaw.ContentLength = -1
-			request.RequestRaw.GetBody = func() (io.ReadCloser, error) {
-				return nil, nil
+func (request *Request) SetJsonBody(v interface{}) {
+	var jsonString string
+	switch value := v.(type) {
+	case map[string]interface{}, map[string]string, *map[string]interface{}:
+		jsonMarshal, err := request.client.JSONMarshal(value)
+		if err != nil {
+			log.Println("SetBody error:", err)
+			return
+		}
+		jsonString = string(jsonMarshal)
+	case string:
+		if gjson.Valid(value) {
+			jsonString = value
+		}
+	case []byte:
+		if gjson.Valid(string(value)) {
+			jsonString = string(value)
+		}
+	default:
+		if reflect.TypeOf(value).Kind() == reflect.Struct || reflect.TypeOf(value).Kind() == reflect.Ptr {
+			jsonMarshal, err := request.client.JSONMarshal(value)
+			if err != nil {
+				log.Println(err)
+				return
 			}
+			jsonString = string(jsonMarshal)
 		}
 	}
-	// 返回 Request 指针本身，以便进行链式调用
-	return request
+	if jsonString != "" {
+		request.SetHeader("Content-Type", "application/json;charset=UTF-8")
+		request.RequestRaw.ContentLength = int64(len(jsonString))
+		request.RequestRaw.Body = io.NopCloser(strings.NewReader(jsonString))
+	}
+
 }
 
 // SetHeader 方法用于设置 HTTP 请求的 Header 部分。它接收两个 string 类型的参数，
@@ -90,6 +63,7 @@ func (request *Request) SetHeader(key, value string) *Request {
 	request.RequestRaw.Header.Set(key, value)
 	return request
 }
+
 func (request *Request) SetHeaders(headers map[string]any) *Request {
 	for key, value := range headers {
 		request.SetHeader(key, fmt.Sprintf("%v", value))

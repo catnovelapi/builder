@@ -157,6 +157,9 @@ func (client *Client) R() *Request {
 		FormData: client.FormData,
 		Cookies:  client.Cookies,
 	}
+	if client.FormData != nil && len(client.FormData) > 0 {
+		client.SetContentType("application/x-www-form-urlencoded")
+	}
 	req.RequestRaw.WithContext(context.Background())
 	return req
 }
