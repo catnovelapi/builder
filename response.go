@@ -194,6 +194,8 @@ func (response *Response) GetByte() []byte {
 		} else {
 			response.Result = result
 		}
+	} else {
+		response.Result = string(body)
 	}
 	return []byte(response.Result)
 }
