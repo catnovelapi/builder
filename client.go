@@ -51,9 +51,9 @@ type Client struct {
 	debugLoggers           *LoggerClient     // debugLoggers 用于存储调试信息的文件
 	httpClientRaw          *http.Client      // httpClientRaw 用于存储 http.Client 的指针
 	Header                 map[string]string // Header 用于存储 HTTP 请求的 Header 部分
-	QueryParam             map[string]any    // QueryParam 用于存储 HTTP 请求的 Query 部分
+	QueryParam             map[string]string // QueryParam 用于存储 HTTP 请求的 Query 部分
 	setResultFunc          func(v string) (string, error)
-	FormData               map[string]any
+	FormData               map[string]string
 	Token                  string
 	AuthScheme             string
 	Cookies                []*http.Cookie
@@ -80,9 +80,9 @@ func NewClient() *Client {
 	cookieJar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	client := &Client{
 		MaxConcurrent:          make(chan struct{}, 500), // 用于限制并发数, 最大并发数为 500
-		QueryParam:             map[string]any{},         // 初始化 QueryParam
+		QueryParam:             map[string]string{},      // 初始化 QueryParam
 		Header:                 map[string]string{},      // 初始化 Header
-		FormData:               map[string]any{},
+		FormData:               map[string]string{},
 		Cookies:                make([]*http.Cookie, 0),
 		RetryWaitTime:          defaultWaitTime,
 		JSONMarshal:            json.Marshal,
@@ -252,7 +252,7 @@ func (client *Client) SetFormDataMany(params url.Values) *Client {
 	}
 	return client
 }
-func (client *Client) SetFormData(key string, value any) *Client {
+func (client *Client) SetFormData(key string, value string) *Client {
 	client.FormData[key] = value
 	return client
 }

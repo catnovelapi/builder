@@ -87,7 +87,7 @@ func (request *Request) SetCookie(cookie *http.Cookie) *Request {
 }
 
 // SetQueryParams 方法用于设置 HTTP 请求的 Query 部分。它接收一个 map[string]interface{} 类型的参数，
-func (request *Request) SetQueryParams(query map[string]any) *Request {
+func (request *Request) SetQueryParams(query map[string]string) *Request {
 	for key, value := range query {
 		request.SetQueryParam(key, value)
 	}
@@ -103,7 +103,7 @@ func (request *Request) SetFormData(key string, value any) *Request {
 	request.FormData.Store(key, fmt.Sprintf("%v", value))
 	return request
 }
-func (request *Request) SetFormDataMany(params map[string]any) *Request {
+func (request *Request) SetFormDataMany(params map[string]string) *Request {
 	for key, value := range params {
 		request.SetFormData(key, value)
 	}

@@ -1,7 +1,7 @@
 package builder
 
 // GetClientQueryParams 方法用于获取 HTTP 请求的 Query 部分。它返回一个
-func (client *Client) GetClientQueryParams() map[string]any {
+func (client *Client) GetClientQueryParams() map[string]string {
 	return client.QueryParam
 }
 
