@@ -13,7 +13,6 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
-	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -46,11 +45,10 @@ type Client struct {
 	sync.RWMutex                         // 用于保证线程安全
 	MaxConcurrent          chan struct{} // 用于限制并发数
 	timeout                int           // timeout 用于存储 HTTP 请求的 Timeout 部分
-	retryNum               int           // retryNum 用于存储重试次数
 	baseUrl                string        // baseUrl 用于存储 HTTP 请求的 BaseUrl 部分
 	debug                  bool          // debug 用于存储是否输出调试信息
 	debugLoggers           *LoggerClient // debugLoggers 用于存储调试信息的文件
-	clientRaw              *http.Client  // clientRaw 用于存储 http.Client 的指针
+	httpClientRaw          *http.Client  // httpClientRaw 用于存储 http.Client 的指针
 	headers                http.Header   // headers 用于存储 HTTP 请求的 Header 部分
 	QueryParam             url.Values    // QueryParam 用于存储 HTTP 请求的 Query 部分
 	setResultFunc          func(v string) (string, error)
@@ -59,14 +57,12 @@ type Client struct {
 	Token                  string
 	AuthScheme             string
 	Cookies                []*http.Cookie
-	Error                  reflect.Type
 	Debug                  bool
 	DisableWarn            bool
 	AllowGetMethodPayload  bool
 	RetryCount             int
 	RetryWaitTime          time.Duration
 	RetryMaxWaitTime       time.Duration
-	RetryResetReaders      bool
 	JSONMarshal            func(v interface{}) ([]byte, error)
 	JSONUnmarshal          func(data []byte, v interface{}) error
 	XMLMarshal             func(v interface{}) ([]byte, error)
@@ -76,7 +72,7 @@ type Client struct {
 }
 
 const (
-	defaultMaxRetries  = 3
+	defaultRetryCount  = 3
 	defaultWaitTime    = time.Duration(100) * time.Millisecond
 	defaultMaxWaitTime = time.Duration(2000) * time.Millisecond
 )
@@ -101,16 +97,16 @@ func NewClient() *Client {
 		XMLMarshal:             xml.Marshal,
 		XMLUnmarshal:           xml.Unmarshal,
 		HeaderAuthorizationKey: http.CanonicalHeaderKey("Authorization"),
-		clientRaw:              &http.Client{Jar: cookieJar},
+		httpClientRaw:          &http.Client{Jar: cookieJar},
 	}
 
-	if client.clientRaw.Transport == nil {
-		client.clientRaw.Transport = createTransport(nil)
+	if client.httpClientRaw.Transport == nil {
+		client.httpClientRaw.Transport = createTransport(nil)
 	}
 	// 默认超时时间为 30 秒
 	client.SetTimeout(30)
 	// 默认重试次数为 3 次
-	client.SetRetryCount(defaultMaxRetries)
+	client.SetRetryCount(defaultRetryCount)
 	// 默认 User-Agent 为随机生成的浏览器 User-Agent
 	client.SetUserAgent(browser.Random())
 	return client
@@ -165,7 +161,7 @@ func (client *Client) SetCookie(cookie string) *Client {
 
 // SetCookieJar 方法用于设置 HTTP 请求的 CookieJar 部分。它接收一个 http.CookieJar 类型的参数，该参数表示 CookieJar 的值。
 func (client *Client) SetCookieJar(cookieJar http.CookieJar) *Client {
-	client.clientRaw.Jar = cookieJar
+	client.httpClientRaw.Jar = cookieJar
 	return client
 }
 
@@ -181,11 +177,11 @@ func (client *Client) SetDebug() *Client {
 }
 
 // SetRetryCount 方法用于设置重试次数。它接收一个 int 类型的参数，该参数表示重试次数。
-func (client *Client) SetRetryCount(num int) *Client {
-	if num <= 0 {
+func (client *Client) SetRetryCount(retryCount int) *Client {
+	if retryCount <= 0 {
 		log.Println("retry number must be greater than 0")
 	} else {
-		client.retryNum = num
+		client.RetryCount = retryCount
 	}
 	return client
 }
@@ -256,14 +252,14 @@ func (client *Client) SetProxy(proxy string) *Client {
 		return client
 	}
 	// 设置 Transport 的 Proxy 字段
-	client.clientRaw.Transport = &http.Transport{Proxy: http.ProxyURL(u)}
+	client.httpClientRaw.Transport = &http.Transport{Proxy: http.ProxyURL(u)}
 	return client
 }
 
 // SetTimeout 方法用于设置 HTTP 请求的 Timeout 部分, timeout 单位为秒。它接收一个 int 类型的参数，该参数表示 Timeout 的值。
 func (client *Client) SetTimeout(timeout int) *Client {
-	// 设置 clientRaw 的 Timeout 字段, timeout 单位为秒
-	client.clientRaw.Timeout = time.Duration(timeout * int(time.Second))
+	// 设置 httpClientRaw 的 Timeout 字段, timeout 单位为秒
+	client.httpClientRaw.Timeout = time.Duration(timeout * int(time.Second))
 	return client
 }
 
@@ -306,7 +302,7 @@ func (client *Client) GetClientDebug() bool {
 
 // GetClientRetryNumber 方法用于获取 HTTP 请求的 RetryNumber 部分。它返回一个 int 类型的参数。
 func (client *Client) GetClientRetryNumber() int {
-	return client.retryNum
+	return client.RetryCount
 }
 
 // GetClientTimeout 方法用于获取 HTTP 请求的 Timeout 部分。它返回一个 int 类型的参数。

@@ -107,7 +107,7 @@ func (request *Request) newDoResponse() (*Response, error) {
 	var err error
 	var raw *http.Response
 	for i := 0; i < request.client.GetClientRetryNumber(); i++ {
-		raw, err = request.client.clientRaw.Do(request.RequestRaw)
+		raw, err = request.client.httpClientRaw.Do(request.RequestRaw)
 		if err != nil {
 			log.Println(fmt.Sprintf("%s Error: %s Retry:%v", request.RequestRaw.Method, err.Error(), i))
 			continue
