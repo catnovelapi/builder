@@ -2,46 +2,117 @@ package builder
 
 import (
 	"encoding/base64"
+	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"github.com/EDDYCJY/fake-useragent"
+	"golang.org/x/net/publicsuffix"
 	"log"
+	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 )
 
+func createTransport(localAddr net.Addr) *http.Transport {
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		DualStack: true,
+	}
+	if localAddr != nil {
+		dialer.LocalAddr = localAddr
+	}
+	return &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           dialer.DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
+	}
+}
+
 // Client 类型用于存储 HTTP 请求的相关信息。
 type Client struct {
-	sync.RWMutex                // 用于保证线程安全
-	MaxConcurrent chan struct{} // 用于限制并发数
-	timeout       int           // timeout 用于存储 HTTP 请求的 Timeout 部分
-	retryNum      int           // retryNum 用于存储重试次数
-	baseUrl       string        // baseUrl 用于存储 HTTP 请求的 BaseUrl 部分
-	debug         bool          // debug 用于存储是否输出调试信息
-	debugLoggers  *LoggerClient // debugLoggers 用于存储调试信息的文件
-	clientRaw     *http.Client  // clientRaw 用于存储 http.Client 的指针
-	headers       http.Header   // headers 用于存储 HTTP 请求的 Header 部分
-	queryParams   url.Values    // queryParams 用于存储 HTTP 请求的 Query 部分
-	setResultFunc func(v string) (string, error)
-	body          interface{} // body 用于存储 HTTP 请求的 Body 部分
+	sync.RWMutex                         // 用于保证线程安全
+	MaxConcurrent          chan struct{} // 用于限制并发数
+	timeout                int           // timeout 用于存储 HTTP 请求的 Timeout 部分
+	retryNum               int           // retryNum 用于存储重试次数
+	baseUrl                string        // baseUrl 用于存储 HTTP 请求的 BaseUrl 部分
+	debug                  bool          // debug 用于存储是否输出调试信息
+	debugLoggers           *LoggerClient // debugLoggers 用于存储调试信息的文件
+	clientRaw              *http.Client  // clientRaw 用于存储 http.Client 的指针
+	headers                http.Header   // headers 用于存储 HTTP 请求的 Header 部分
+	QueryParam             url.Values    // QueryParam 用于存储 HTTP 请求的 Query 部分
+	setResultFunc          func(v string) (string, error)
+	FormData               url.Values
+	Header                 http.Header
+	Token                  string
+	AuthScheme             string
+	Cookies                []*http.Cookie
+	Error                  reflect.Type
+	Debug                  bool
+	DisableWarn            bool
+	AllowGetMethodPayload  bool
+	RetryCount             int
+	RetryWaitTime          time.Duration
+	RetryMaxWaitTime       time.Duration
+	RetryResetReaders      bool
+	JSONMarshal            func(v interface{}) ([]byte, error)
+	JSONUnmarshal          func(data []byte, v interface{}) error
+	XMLMarshal             func(v interface{}) ([]byte, error)
+	XMLUnmarshal           func(data []byte, v interface{}) error
+	HeaderAuthorizationKey string
+	body                   interface{} // body 用于存储 HTTP 请求的 Body 部分
 }
+
+const (
+	defaultMaxRetries  = 3
+	defaultWaitTime    = time.Duration(100) * time.Millisecond
+	defaultMaxWaitTime = time.Duration(2000) * time.Millisecond
+)
 
 // NewClient 方法用于创建一个新的 Client 对象, 并返回该对象的指针。
 func NewClient() *Client {
-	client := &Client{
-		MaxConcurrent: make(chan struct{}, 500), // 用于限制并发数, 最大并发数为 500
-		queryParams:   make(url.Values),         // 初始化 queryParams
-		headers:       make(http.Header),        // 初始化 headers
-		clientRaw: &http.Client{
-			Transport: &http.Transport{}, // 初始化 Transport
-		},
+	cookieJar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+	if err != nil {
+		log.Println("NewClient cookiejar.New error:", err)
 	}
-	client.SetTimeout(30)                 // 默认超时时间为 30 秒
-	client.SetRetryCount(3)               // 默认重试次数为 3 次
-	client.SetUserAgent(browser.Random()) // 默认 User-Agent 为随机生成的浏览器 User-Agent
+	client := &Client{
+		MaxConcurrent:          make(chan struct{}, 500), // 用于限制并发数, 最大并发数为 500
+		QueryParam:             make(url.Values),         // 初始化 QueryParam
+		headers:                make(http.Header),        // 初始化 headers
+		FormData:               url.Values{},
+		Header:                 http.Header{},
+		Cookies:                make([]*http.Cookie, 0),
+		RetryWaitTime:          defaultWaitTime,
+		RetryMaxWaitTime:       defaultMaxWaitTime,
+		JSONMarshal:            json.Marshal,
+		JSONUnmarshal:          json.Unmarshal,
+		XMLMarshal:             xml.Marshal,
+		XMLUnmarshal:           xml.Unmarshal,
+		HeaderAuthorizationKey: http.CanonicalHeaderKey("Authorization"),
+		clientRaw:              &http.Client{Jar: cookieJar},
+	}
+
+	if client.clientRaw.Transport == nil {
+		client.clientRaw.Transport = createTransport(nil)
+	}
+	// 默认超时时间为 30 秒
+	client.SetTimeout(30)
+	// 默认重试次数为 3 次
+	client.SetRetryCount(defaultMaxRetries)
+	// 默认 User-Agent 为随机生成的浏览器 User-Agent
+	client.SetUserAgent(browser.Random())
 	return client
 }
 
@@ -144,7 +215,7 @@ func (client *Client) SetUserAgent(userAgent string) *Client {
 
 // SetQueryParam 方法用于设置 HTTP 请求的 Query 部分。它接收两个 string 类型的参数，
 func (client *Client) SetQueryParam(key string, value any) *Client {
-	client.queryParams.Add(key, fmt.Sprintf("%v", value))
+	client.QueryParam.Add(key, fmt.Sprintf("%v", value))
 	return client
 }
 
@@ -169,7 +240,7 @@ func (client *Client) SetQueryParamString(query string) *Client {
 	// 将 query 解析为 url.Values 类型的参数
 	params, err := url.ParseQuery(strings.TrimSpace(query))
 	if err == nil {
-		// 将 params 中的参数存储到 queryParams 中
+		// 将 params 中的参数存储到 QueryParam 中
 		client.SetFormDataQueryParams(params)
 	} else {
 		log.Println("SetQueryString url.ParseQuery error:", err)
@@ -205,7 +276,7 @@ func (client *Client) SetBasicAuth(username, password string) *Client {
 
 // GetClientQueryParams 方法用于获取 HTTP 请求的 Query 部分。它返回一个 url.Values 类型的参数。
 func (client *Client) GetClientQueryParams() url.Values {
-	return client.queryParams
+	return client.QueryParam
 }
 
 // GetClientBody 方法用于获取 HTTP 请求的 Body 部分。它返回一个 interface{} 类型的参数。
@@ -215,7 +286,7 @@ func (client *Client) GetClientBody() interface{} {
 
 // GetClientQueryParamsEncode 方法用于获取 HTTP 请求的 Query 部分。它返回一个 Encode 后的 string 类型的参数。
 func (client *Client) GetClientQueryParamsEncode() string {
-	return client.queryParams.Encode()
+	return client.QueryParam.Encode()
 }
 
 // GetClientHeaders 方法用于获取 HTTP 请求的 Header 部分。它返回一个 http.Header 类型的参数。
