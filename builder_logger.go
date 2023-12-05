@@ -73,8 +73,10 @@ func NewLoggerClient(debugFile *os.File) *LoggerClient {
 // formatRequestLogText 方法用于格式化 HTTP 请求的日志信息。
 func (builderLogger *LoggerClient) formatRequestLogText(debug bool, request *Request) {
 	var body string
-	if request.GetQueryParams() != nil {
-		body = request.GetQueryParamsEncode()
+	if body = request.GetQueryParamsEncode(); body == "" {
+		if body = request.GetFormDataEncode(); body == "" {
+			body = "this request has no body"
+		}
 	}
 	if body == "" {
 		if request.RequestRaw.Body != nil {

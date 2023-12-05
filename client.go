@@ -43,17 +43,17 @@ func createTransport(localAddr net.Addr) *http.Transport {
 
 // Client 类型用于存储 HTTP 请求的相关信息。
 type Client struct {
-	sync.RWMutex                         // 用于保证线程安全
-	MaxConcurrent          chan struct{} // 用于限制并发数
-	timeout                int           // timeout 用于存储 HTTP 请求的 Timeout 部分
-	baseUrl                string        // baseUrl 用于存储 HTTP 请求的 BaseUrl 部分
-	debug                  bool          // debug 用于存储是否输出调试信息
-	debugLoggers           *LoggerClient // debugLoggers 用于存储调试信息的文件
-	httpClientRaw          *http.Client  // httpClientRaw 用于存储 http.Client 的指针
-	Header                 http.Header   // Header 用于存储 HTTP 请求的 Header 部分
-	QueryParam             url.Values    // QueryParam 用于存储 HTTP 请求的 Query 部分
+	sync.RWMutex                          // 用于保证线程安全
+	MaxConcurrent          chan struct{}  // 用于限制并发数
+	timeout                int            // timeout 用于存储 HTTP 请求的 Timeout 部分
+	baseUrl                string         // baseUrl 用于存储 HTTP 请求的 BaseUrl 部分
+	debug                  bool           // debug 用于存储是否输出调试信息
+	debugLoggers           *LoggerClient  // debugLoggers 用于存储调试信息的文件
+	httpClientRaw          *http.Client   // httpClientRaw 用于存储 http.Client 的指针
+	Header                 http.Header    // Header 用于存储 HTTP 请求的 Header 部分
+	QueryParam             map[string]any // QueryParam 用于存储 HTTP 请求的 Query 部分
 	setResultFunc          func(v string) (string, error)
-	FormData               url.Values
+	FormData               map[string]any
 	Token                  string
 	AuthScheme             string
 	Cookies                []*http.Cookie
@@ -80,9 +80,9 @@ func NewClient() *Client {
 	cookieJar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	client := &Client{
 		MaxConcurrent:          make(chan struct{}, 500), // 用于限制并发数, 最大并发数为 500
-		QueryParam:             make(url.Values),         // 初始化 QueryParam
+		QueryParam:             map[string]any{},         // 初始化 QueryParam
 		Header:                 make(http.Header),        // 初始化 Header
-		FormData:               url.Values{},
+		FormData:               map[string]any{},
 		Cookies:                make([]*http.Cookie, 0),
 		RetryWaitTime:          defaultWaitTime,
 		JSONMarshal:            json.Marshal,
@@ -145,22 +145,31 @@ func (client *Client) SetDebugFile(name string) *Client {
 // R 方法用于创建一个新的 Request 对象。它接收一个 string 类型的参数，该参数表示 HTTP 请求的 Path 部分。
 func (client *Client) R() *Request {
 	req := &Request{
-		client:     client,
-		QueryParam: client.QueryParam,
+		client: client,
 		RequestRaw: &http.Request{
 			//Body:       rc,
 			//URL:        u,
 			Proto:      "HTTP/1.1",
 			ProtoMajor: 1,
 			ProtoMinor: 1,
-			Header:     client.GetClientHeaders(),
+			Header:     make(http.Header),
 		},
-		FormData: client.FormData,
-		Cookies:  client.Cookies,
+		FormData:   sync.Map{},
+		QueryParam: sync.Map{},
+		Cookies:    client.Cookies,
 	}
+	// Create a new header and copy from the original
+	for key, values := range client.GetClientHeaders() {
+		for _, value := range values {
+			req.SetHeader(key, value)
+		}
+	}
+
 	if client.FormData != nil && len(client.FormData) > 0 {
-		client.SetContentType("application/x-www-form-urlencoded")
+		req.SetFormDataMany(client.FormData)
+		req.SetHeader("Content-Type", "application/x-www-form-urlencoded")
 	}
+	req.SetQueryParams(client.QueryParam)
 	req.RequestRaw.WithContext(context.Background())
 	return req
 }
@@ -228,7 +237,7 @@ func (client *Client) SetUserAgent(userAgent string) *Client {
 
 // SetQueryParam 方法用于设置 HTTP 请求的 Query 部分。它接收两个 string 类型的参数，
 func (client *Client) SetQueryParam(key string, value any) *Client {
-	client.QueryParam.Add(key, fmt.Sprintf("%v", value))
+	client.QueryParam[key] = fmt.Sprintf("%v", value)
 	return client
 }
 
@@ -247,8 +256,8 @@ func (client *Client) SetFormDataMany(params url.Values) *Client {
 	}
 	return client
 }
-func (client *Client) SetFormData(key, value string) *Client {
-	client.FormData.Add(key, value)
+func (client *Client) SetFormData(key string, value any) *Client {
+	client.FormData[key] = value
 	return client
 }
 

@@ -71,18 +71,23 @@ func (request *Request) newParseUrl(path string) (*url.URL, error) {
 
 // newResponse 方法用于创建一个 Response 对象。它接收两个 string 类型的参数，分别表示 HTTP 请求的方法和路径。
 func (request *Request) newResponse(method, path string) (*Response, error) {
+	var query string
+	query = request.GetQueryParamsEncode()
 	_, err := request.newParseUrl(path)
 	if err != nil {
 		return nil, err
 	}
-	if request.RequestRaw.Method = method; request.RequestRaw.Method == MethodGet {
-		// GET请求不需要设置Body,因为Body会被忽略
-		request.RequestRaw.URL.RawQuery = request.GetQueryParamsEncode()
-	} else {
-		if len(request.QueryParam) > 0 {
-			request.RequestRaw.Body = request.GetQueryParamsNopCloser()
+	request.RequestRaw.Method = method
+	if query != "" {
+		request.RequestRaw.URL.RawQuery = query
+	}
+	if request.RequestRaw.Method != MethodGet {
+		formDate := request.GetFormDataEncode()
+		if formDate != "" {
+			request.RequestRaw.Body = io.NopCloser(strings.NewReader(formDate))
 		}
 	}
+
 	request.client.debugLoggers.formatRequestLogText(request.client.GetClientDebug(), request)
 
 	return request.do()

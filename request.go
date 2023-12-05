@@ -8,15 +8,15 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
-	"sort"
 	"strings"
+	"sync"
 )
 
 type Request struct {
 	client     *Client       // 指向 Client 的指针
 	RequestRaw *http.Request // 指向 http.Request 的指针
-	QueryParam url.Values    // 用于存储 Query 参数的 url.Values
-	FormData   url.Values    // 用于存储 Form 参数的 url.Values
+	QueryParam sync.Map
+	FormData   sync.Map
 	Cookies    []*http.Cookie
 }
 
@@ -57,8 +57,8 @@ func (request *Request) SetJsonBody(v interface{}) {
 
 // SetHeader 方法用于设置 HTTP 请求的 Header 部分。它接收两个 string 类型的参数，
 func (request *Request) SetHeader(key, value string) *Request {
-	request.client.Lock()
-	defer request.client.Unlock()
+	//request.client.Lock()
+	//defer request.client.Unlock()
 	request.RequestRaw.Header.Set(key, value)
 	return request
 }
@@ -87,7 +87,7 @@ func (request *Request) SetCookie(cookie *http.Cookie) *Request {
 }
 
 // SetQueryParams 方法用于设置 HTTP 请求的 Query 部分。它接收一个 map[string]interface{} 类型的参数，
-func (request *Request) SetQueryParams(query map[string]interface{}) *Request {
+func (request *Request) SetQueryParams(query map[string]any) *Request {
 	for key, value := range query {
 		request.SetQueryParam(key, value)
 	}
@@ -96,20 +96,16 @@ func (request *Request) SetQueryParams(query map[string]interface{}) *Request {
 
 // SetQueryParam 方法用于设置 HTTP 请求的 Query 部分。它接收两个 string 类型的参数，
 func (request *Request) SetQueryParam(key string, value interface{}) *Request {
-	request.client.Lock()
-	defer request.client.Unlock()
-	request.QueryParam.Set(key, fmt.Sprintf("%v", value))
+	request.QueryParam.Store(key, fmt.Sprintf("%v", value))
 	return request
 }
-func (request *Request) SetFormData(key, value string) *Request {
-	request.client.Lock()
-	defer request.client.Unlock()
-	request.FormData.Set(key, value)
+func (request *Request) SetFormData(key string, value any) *Request {
+	request.FormData.Store(key, fmt.Sprintf("%v", value))
 	return request
 }
-func (request *Request) SetFormDataMany(params url.Values) *Request {
+func (request *Request) SetFormDataMany(params map[string]any) *Request {
 	for key, value := range params {
-		request.SetFormData(key, value[0])
+		request.SetFormData(key, value)
 	}
 	return request
 }
@@ -118,7 +114,9 @@ func (request *Request) SetFormDataMany(params url.Values) *Request {
 func (request *Request) SetQueryString(query string) *Request {
 	params, err := url.ParseQuery(strings.TrimSpace(query))
 	if err == nil {
-		request.SetFormDataMany(params)
+		for key, value := range params {
+			request.SetQueryParam(key, value[0])
+		}
 	} else {
 		log.Println("SetQueryString url.ParseQuery error:", err)
 	}
@@ -127,39 +125,28 @@ func (request *Request) SetQueryString(query string) *Request {
 
 // GetQueryParamsEncode 方法用于获取 HTTP 请求的 Query 部分的 URL 编码字符串。
 func (request *Request) GetQueryParamsEncode() string {
-	request.client.Lock()
-	defer request.client.Unlock()
-	// 赋值给 v, 以确保线程安全
-	v := request.GetQueryParams()
-	if v == nil {
-		return ""
-	}
-	var buf strings.Builder
-	// 创建一个 string 类型的切片
-	keys := make([]string, 0, len(v))
-	for k := range v {
-		keys = append(keys, k)
-	}
-	// 对切片进行排序
-	sort.Strings(keys)
-	for _, k := range keys {
-		vs := v[k]
-		// 对 key 进行 URL 编码, 并将结果赋值给 keyEscaped
-		keyEscaped := url.QueryEscape(k)
-		for _, v1 := range vs {
-			if buf.Len() > 0 {
-				// 如果 buf 的长度大于 0, 则在 buf 尾部添加 &
-				buf.WriteByte('&')
-			}
+	var parts []string
+	request.QueryParam.Range(func(key, value interface{}) bool {
+		k, _ := key.(string)
+		v, _ := value.(string)
+		part := fmt.Sprintf("%s=%s", url.QueryEscape(k), url.QueryEscape(v))
+		parts = append(parts, part)
+		return true
+	})
+	return strings.Join(parts, "&")
+}
 
-			buf.WriteString(keyEscaped)
-			// 在 buf 尾部添加 =
-			buf.WriteByte('=')
-			// 将 v1 进行 URL 编码, 并将结果写入 buf
-			buf.WriteString(url.QueryEscape(v1))
-		}
-	}
-	return buf.String()
+// GetFormDataEncode 方法用于获取 HTTP 请求的 Query 部分的 URL 编码字符串。
+func (request *Request) GetFormDataEncode() string {
+	var parts []string
+	request.FormData.Range(func(key, value interface{}) bool {
+		k, _ := key.(string)
+		v, _ := value.(string)
+		part := fmt.Sprintf("%s=%s", url.QueryEscape(k), url.QueryEscape(v))
+		parts = append(parts, part)
+		return true
+	})
+	return strings.Join(parts, "&")
 }
 
 // GetQueryParamsNopCloser 方法用于获取 HTTP 请求的 Query 部分的 ReadCloser。
@@ -169,9 +156,9 @@ func (request *Request) GetQueryParamsNopCloser() io.ReadCloser {
 }
 
 // GetQueryParams 方法用于获取 HTTP 请求的 Query 部分的 url.Values。
-func (request *Request) GetQueryParams() url.Values {
-	return request.QueryParam
-}
+//func (request *Request) GetQueryParams() url.Values {
+//	return request.QueryParam
+//}
 
 // GetHost 方法用于获取 HTTP 请求的 Host 部分的字符串。
 func (request *Request) GetHost() string {

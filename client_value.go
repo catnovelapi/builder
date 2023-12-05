@@ -2,22 +2,16 @@ package builder
 
 import (
 	"net/http"
-	"net/url"
 )
 
-// GetClientQueryParams 方法用于获取 HTTP 请求的 Query 部分。它返回一个 url.Values 类型的参数。
-func (client *Client) GetClientQueryParams() url.Values {
+// GetClientQueryParams 方法用于获取 HTTP 请求的 Query 部分。它返回一个
+func (client *Client) GetClientQueryParams() map[string]any {
 	return client.QueryParam
 }
 
 // GetClientBody 方法用于获取 HTTP 请求的 Body 部分。它返回一个 interface{} 类型的参数。
 func (client *Client) GetClientBody() interface{} {
 	return client.body
-}
-
-// GetClientQueryParamsEncode 方法用于获取 HTTP 请求的 Query 部分。它返回一个 Encode 后的 string 类型的参数。
-func (client *Client) GetClientQueryParamsEncode() string {
-	return client.QueryParam.Encode()
 }
 
 // GetClientHeaders 方法用于获取 HTTP 请求的 Header 部分。它返回一个 http.Header 类型的参数。
