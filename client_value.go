@@ -1,9 +1,5 @@
 package builder
 
-import (
-	"net/http"
-)
-
 // GetClientQueryParams 方法用于获取 HTTP 请求的 Query 部分。它返回一个
 func (client *Client) GetClientQueryParams() map[string]any {
 	return client.QueryParam
@@ -12,11 +8,6 @@ func (client *Client) GetClientQueryParams() map[string]any {
 // GetClientBody 方法用于获取 HTTP 请求的 Body 部分。它返回一个 interface{} 类型的参数。
 func (client *Client) GetClientBody() interface{} {
 	return client.body
-}
-
-// GetClientHeaders 方法用于获取 HTTP 请求的 Header 部分。它返回一个 http.Header 类型的参数。
-func (client *Client) GetClientHeaders() http.Header {
-	return client.Header
 }
 
 // GetClientBaseURL 方法用于获取 HTTP 请求的 BaseUrl 部分。它返回一个 string 类型的参数。
@@ -41,5 +32,5 @@ func (client *Client) GetClientTimeout() int {
 
 // GetClientCookie 方法用于获取 HTTP 请求的 Cookie 部分。它返回一个 string 类型的参数。
 func (client *Client) GetClientCookie() string {
-	return client.Header.Get("Cookie")
+	return client.Header["Cookie"]
 }

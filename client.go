@@ -43,15 +43,15 @@ func createTransport(localAddr net.Addr) *http.Transport {
 
 // Client 类型用于存储 HTTP 请求的相关信息。
 type Client struct {
-	sync.RWMutex                          // 用于保证线程安全
-	MaxConcurrent          chan struct{}  // 用于限制并发数
-	timeout                int            // timeout 用于存储 HTTP 请求的 Timeout 部分
-	baseUrl                string         // baseUrl 用于存储 HTTP 请求的 BaseUrl 部分
-	debug                  bool           // debug 用于存储是否输出调试信息
-	debugLoggers           *LoggerClient  // debugLoggers 用于存储调试信息的文件
-	httpClientRaw          *http.Client   // httpClientRaw 用于存储 http.Client 的指针
-	Header                 http.Header    // Header 用于存储 HTTP 请求的 Header 部分
-	QueryParam             map[string]any // QueryParam 用于存储 HTTP 请求的 Query 部分
+	sync.RWMutex                             // 用于保证线程安全
+	MaxConcurrent          chan struct{}     // 用于限制并发数
+	timeout                int               // timeout 用于存储 HTTP 请求的 Timeout 部分
+	baseUrl                string            // baseUrl 用于存储 HTTP 请求的 BaseUrl 部分
+	debug                  bool              // debug 用于存储是否输出调试信息
+	debugLoggers           *LoggerClient     // debugLoggers 用于存储调试信息的文件
+	httpClientRaw          *http.Client      // httpClientRaw 用于存储 http.Client 的指针
+	Header                 map[string]string // Header 用于存储 HTTP 请求的 Header 部分
+	QueryParam             map[string]any    // QueryParam 用于存储 HTTP 请求的 Query 部分
 	setResultFunc          func(v string) (string, error)
 	FormData               map[string]any
 	Token                  string
@@ -81,7 +81,7 @@ func NewClient() *Client {
 	client := &Client{
 		MaxConcurrent:          make(chan struct{}, 500), // 用于限制并发数, 最大并发数为 500
 		QueryParam:             map[string]any{},         // 初始化 QueryParam
-		Header:                 make(http.Header),        // 初始化 Header
+		Header:                 map[string]string{},      // 初始化 Header
 		FormData:               map[string]any{},
 		Cookies:                make([]*http.Cookie, 0),
 		RetryWaitTime:          defaultWaitTime,
@@ -114,7 +114,7 @@ func (client *Client) SetBaseURL(baseUrl string) *Client {
 
 // SetContentType 方法用于设置 HTTP 请求的 ContentType 部分。它接收一个 string 类型的参数，该参数表示 ContentType 的值。
 func (client *Client) SetContentType(contentType string) *Client {
-	client.Header.Set("Content-Type", contentType)
+	client.Header["Content-Type"] = contentType
 	return client
 }
 
@@ -158,16 +158,14 @@ func (client *Client) R() *Request {
 		QueryParam: sync.Map{},
 		Cookies:    client.Cookies,
 	}
-	// Create a new header and copy from the original
-	for key, values := range client.GetClientHeaders() {
-		for _, value := range values {
-			req.SetHeader(key, value)
-		}
-	}
+	// 设置 Header
+	req.SetHeaders(client.Header)
 
 	if client.FormData != nil && len(client.FormData) > 0 {
 		req.SetFormDataMany(client.FormData)
-		req.SetHeader("Content-Type", "application/x-www-form-urlencoded")
+		if client.Header["Content-Type"] == "" {
+			req.SetHeader("Content-Type", "application/x-www-form-urlencoded")
+		}
 	}
 	req.SetQueryParams(client.QueryParam)
 	req.RequestRaw.WithContext(context.Background())
@@ -176,11 +174,10 @@ func (client *Client) R() *Request {
 
 // SetCookie 方法用于设置 HTTP 请求的 Cookie 部分。它接收一个 string 类型的参数，该参数表示 Cookie 的值。
 func (client *Client) SetCookie(cookie string) *Client {
-	if client.Header.Get("Cookie") != "" {
-		// 如果已经设置了 Cookie，那么将新的 Cookie 追加到原有的 Cookie 后面
-		client.Header.Set("Cookie", client.Header.Get("Cookie")+";"+cookie)
+	if client.Header["Cookie"] == "" {
+		client.Header["Cookie"] = cookie
 	} else {
-		client.Header.Set("Cookie", cookie)
+		client.Header["Cookie"] += ";" + cookie
 	}
 	return client
 }
@@ -214,8 +211,7 @@ func (client *Client) SetRetryCount(retryCount int) *Client {
 
 // SetHeader 方法用于设置 HTTP 请求的 Header 部分。它接收两个 string 类型的参数，
 func (client *Client) SetHeader(key string, value interface{}) *Client {
-	// 将 value 转换为 string 类型, 并将其存储到 Header 中
-	client.Header.Set(key, fmt.Sprintf("%v", value))
+	client.Header[key] = fmt.Sprintf("%v", value)
 	return client
 }
 

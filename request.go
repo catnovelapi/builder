@@ -63,9 +63,9 @@ func (request *Request) SetHeader(key, value string) *Request {
 	return request
 }
 
-func (request *Request) SetHeaders(headers map[string]any) *Request {
+func (request *Request) SetHeaders(headers map[string]string) *Request {
 	for key, value := range headers {
-		request.SetHeader(key, fmt.Sprintf("%v", value))
+		request.SetHeader(key, value)
 	}
 	return request
 }
