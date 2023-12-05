@@ -83,21 +83,23 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 			request.RequestRaw.Body = request.GetQueryParamsNopCloser()
 		}
 	}
-	if request.client.GetClientDebug() {
-		request.client.debugLoggers.formatRequestLogText(request.client.GetClientDebug(), request)
-	}
+	request.client.debugLoggers.formatRequestLogText(request.client.GetClientDebug(), request)
+
+	return request.do()
+
+}
+
+func (request *Request) do() (*Response, error) {
 	if request.client.GetClientRetryNumber() == 0 {
+		// 如果重试次数为 0，则设置重试次数为 1
 		request.client.SetRetryCount(1)
 	}
 	response, ok := request.newDoResponse()
 	if ok != nil {
 		return nil, ok
 	}
-	if request.client.GetClientDebug() {
-		request.client.debugLoggers.formatResponseLogText(request.client.GetClientDebug(), response)
-	}
+	defer request.client.debugLoggers.formatResponseLogText(request.client.GetClientDebug(), response)
 	return response, nil
-
 }
 
 // newDoResponse 方法用于执行 HTTP 请求。它接收一个 Response 对象的指针，表示 HTTP 请求的响应。
