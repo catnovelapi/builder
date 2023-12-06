@@ -1,114 +1,46 @@
 package builder
 
 import (
-	"encoding/json"
+	"bytes"
 	"fmt"
-	"github.com/tidwall/gjson"
 	"golang.org/x/net/context"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"reflect"
-	"sort"
 	"strings"
+	"sync"
 )
 
 type Request struct {
-	client      *Client       // 指向 Client 的指针
-	RequestRaw  *http.Request // 指向 http.Request 的指针
-	queryParams url.Values    // 用于存储 Query 参数的 url.Values
+	URL        *url.URL
+	ctx        context.Context
+	Method     string // HTTP 请求的 Method 部分
+	Body       interface{}
+	bodyBuf    *bytes.Buffer
+	bodyBytes  []byte
+	client     *Client // 指向 Client 的指针
+	Header     sync.Map
+	QueryParam sync.Map
+	FormData   sync.Map
+	Cookies    []*http.Cookie
 }
 
-// R 方法用于创建一个新的 Request 对象。它接收一个 string 类型的参数，该参数表示 HTTP 请求的 Path 部分。
-func (client *Client) R() *Request {
-	req := &http.Request{
-		//Body:       rc,
-		//URL:        u,
-		Proto:      "HTTP/1.1",
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		Header:     client.GetClientHeaders(),
-	}
-	return &Request{
-		client:      client,
-		queryParams: client.GetClientQueryParams(),
-		RequestRaw:  req.WithContext(context.Background()),
-	}
-}
-
-// SetBody 方法用于设置 HTTP 请求的 Body 和 ContentLength 部分。它接收一个 string 类型的参数，
-func (request *Request) setDataBody(v string) {
-	request.RequestRaw.ContentLength = int64(len(v))
-	request.RequestRaw.Body = io.NopCloser(strings.NewReader(v))
-}
-
-func (request *Request) toJsonString(v interface{}) (string, error) {
-	m, err := json.Marshal(v)
-	if err != nil {
-		return "", fmt.Errorf("toJsonString json.Marshal error: %s", err)
-	}
-	return string(m), nil
-
-}
-func (request *Request) setJsonBody(v interface{}) {
-	jsonString, err := request.toJsonString(v)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	if gjson.Valid(jsonString) {
-		request.setDataBody(jsonString)
-	} else {
-		log.Println("SetBody error:", jsonString)
-	}
-
-}
-
-// SetBody 方法用于设置 HTTP 请求的 Body 部分。它接收一个 interface{} 类型的参数，
-// 该参数可以是以下几种类型：string, []byte, map[string]interface{}, map[string]string,
-// 对于不支持的类型，方法会设置 ContentLength 为 -1，并将 GetBody 方法设置为返回 nil。
-// 如果成功设置了 body，方法会返回 Request 指针本身，以便进行链式调用。
-func (request *Request) SetBody(body interface{}) *Request {
-	// 加锁以确保线程安全
-	request.client.Lock()
-	defer request.client.Unlock()
-
-	// 使用 type switch 来检查 body 的实际类型
-	switch v := body.(type) {
-	case string: // 如果 body 是 string 类型
-		request.setDataBody(v)
-	case []byte: // 如果 body 是 []byte 类型
-		request.setDataBody(string(v))
-	case map[string]interface{}, map[string]string: // 如果 body 是 map 类型
-		request.setJsonBody(v)
-	default: // 对于其他类型
-		if reflect.TypeOf(v).Kind() == reflect.Struct {
-			request.setJsonBody(&v)
-		} else if reflect.TypeOf(v).Kind() == reflect.Ptr {
-			request.setJsonBody(v)
-		} else {
-			// 设置 ContentLength 为 -1，并将 GetBody 方法设置为返回 nil
-			request.RequestRaw.ContentLength = -1
-			request.RequestRaw.GetBody = func() (io.ReadCloser, error) {
-				return nil, nil
-			}
-		}
-	}
-	// 返回 Request 指针本身，以便进行链式调用
+func (request *Request) SetBody(v interface{}) *Request {
+	request.Body = v
 	return request
 }
 
 // SetHeader 方法用于设置 HTTP 请求的 Header 部分。它接收两个 string 类型的参数，
 func (request *Request) SetHeader(key, value string) *Request {
-	request.client.Lock()
-	defer request.client.Unlock()
-	request.RequestRaw.Header.Set(key, value)
+	//request.RequestRaw.Header.Set(key, value)
+	request.Header.Store(key, value)
 	return request
 }
-func (request *Request) SetHeaders(headers map[string]any) *Request {
+
+func (request *Request) SetHeaders(headers map[string]string) *Request {
 	for key, value := range headers {
-		request.SetHeader(key, fmt.Sprintf("%v", value))
+		request.SetHeader(key, value)
 	}
 	return request
 }
@@ -123,14 +55,12 @@ func (request *Request) SetCookies(cookie []*http.Cookie) *Request {
 
 // SetCookie 方法用于设置 HTTP 请求的 Cookie 部分。它接收一个 *http.Cookie 类型的参数，
 func (request *Request) SetCookie(cookie *http.Cookie) *Request {
-	request.client.Lock()
-	defer request.client.Unlock()
-	request.RequestRaw.AddCookie(cookie)
+	//request.RequestRaw.AddCookie(cookie)
 	return request
 }
 
 // SetQueryParams 方法用于设置 HTTP 请求的 Query 部分。它接收一个 map[string]interface{} 类型的参数，
-func (request *Request) SetQueryParams(query map[string]interface{}) *Request {
+func (request *Request) SetQueryParams(query map[string]string) *Request {
 	for key, value := range query {
 		request.SetQueryParam(key, value)
 	}
@@ -139,9 +69,17 @@ func (request *Request) SetQueryParams(query map[string]interface{}) *Request {
 
 // SetQueryParam 方法用于设置 HTTP 请求的 Query 部分。它接收两个 string 类型的参数，
 func (request *Request) SetQueryParam(key string, value interface{}) *Request {
-	request.client.Lock()
-	defer request.client.Unlock()
-	request.queryParams.Set(key, fmt.Sprintf("%v", value))
+	request.QueryParam.Store(key, fmt.Sprintf("%v", value))
+	return request
+}
+func (request *Request) SetFormData(key string, value any) *Request {
+	request.FormData.Store(key, fmt.Sprintf("%v", value))
+	return request
+}
+func (request *Request) SetFormDataMany(params map[string]string) *Request {
+	for key, value := range params {
+		request.SetFormData(key, value)
+	}
 	return request
 }
 
@@ -149,10 +87,8 @@ func (request *Request) SetQueryParam(key string, value interface{}) *Request {
 func (request *Request) SetQueryString(query string) *Request {
 	params, err := url.ParseQuery(strings.TrimSpace(query))
 	if err == nil {
-		for p, v := range params {
-			for _, pv := range v {
-				request.SetQueryParam(p, pv)
-			}
+		for key, value := range params {
+			request.SetQueryParam(key, value[0])
 		}
 	} else {
 		log.Println("SetQueryString url.ParseQuery error:", err)
@@ -162,39 +98,28 @@ func (request *Request) SetQueryString(query string) *Request {
 
 // GetQueryParamsEncode 方法用于获取 HTTP 请求的 Query 部分的 URL 编码字符串。
 func (request *Request) GetQueryParamsEncode() string {
-	request.client.Lock()
-	defer request.client.Unlock()
-	// 赋值给 v, 以确保线程安全
-	v := request.GetQueryParams()
-	if v == nil {
-		return ""
-	}
-	var buf strings.Builder
-	// 创建一个 string 类型的切片
-	keys := make([]string, 0, len(v))
-	for k := range v {
-		keys = append(keys, k)
-	}
-	// 对切片进行排序
-	sort.Strings(keys)
-	for _, k := range keys {
-		vs := v[k]
-		// 对 key 进行 URL 编码, 并将结果赋值给 keyEscaped
-		keyEscaped := url.QueryEscape(k)
-		for _, v1 := range vs {
-			if buf.Len() > 0 {
-				// 如果 buf 的长度大于 0, 则在 buf 尾部添加 &
-				buf.WriteByte('&')
-			}
+	var parts []string
+	request.QueryParam.Range(func(key, value interface{}) bool {
+		k, _ := key.(string)
+		v, _ := value.(string)
+		part := fmt.Sprintf("%s=%s", url.QueryEscape(k), url.QueryEscape(v))
+		parts = append(parts, part)
+		return true
+	})
+	return strings.Join(parts, "&")
+}
 
-			buf.WriteString(keyEscaped)
-			// 在 buf 尾部添加 =
-			buf.WriteByte('=')
-			// 将 v1 进行 URL 编码, 并将结果写入 buf
-			buf.WriteString(url.QueryEscape(v1))
-		}
-	}
-	return buf.String()
+// GetFormDataEncode 方法用于获取 HTTP 请求的 Query 部分的 URL 编码字符串。
+func (request *Request) GetFormDataEncode() string {
+	var parts []string
+	request.FormData.Range(func(key, value interface{}) bool {
+		k, _ := key.(string)
+		v, _ := value.(string)
+		part := fmt.Sprintf("%s=%s", url.QueryEscape(k), url.QueryEscape(v))
+		parts = append(parts, part)
+		return true
+	})
+	return strings.Join(parts, "&")
 }
 
 // GetQueryParamsNopCloser 方法用于获取 HTTP 请求的 Query 部分的 ReadCloser。
@@ -204,36 +129,58 @@ func (request *Request) GetQueryParamsNopCloser() io.ReadCloser {
 }
 
 // GetQueryParams 方法用于获取 HTTP 请求的 Query 部分的 url.Values。
-func (request *Request) GetQueryParams() url.Values {
-	return request.queryParams
-}
+//func (request *Request) GetQueryParams() url.Values {
+//	return request.QueryParam
+//}
 
 // GetHost 方法用于获取 HTTP 请求的 Host 部分的字符串。
 func (request *Request) GetHost() string {
-	return request.RequestRaw.URL.Host
+	return request.client.baseUrl
 }
 
 // GetPath 方法用于获取 HTTP 请求的 Path 部分的字符串。
 func (request *Request) GetPath() string {
-	return request.RequestRaw.URL.Path
+	return request.URL.Path
 }
 
 // GetUrl 方法用于获取 HTTP 请求的 URL 部分的字符串。
 func (request *Request) GetUrl() string {
-	return request.RequestRaw.URL.String()
+	return request.URL.String()
 }
 
-// GetProto 方法用于获取 HTTP 请求的 Proto 部分的字符串。
-func (request *Request) GetProto() string {
-	return request.RequestRaw.Proto
-}
+//// GetProto 方法用于获取 HTTP 请求的 Proto 部分的字符串。
+//func (request *Request) GetProto() string {
+//	return request.Proto
+//}
 
 // GetMethod 方法用于获取 HTTP 请求的 Method 部分的字符串。
 func (request *Request) GetMethod() string {
-	return request.RequestRaw.Method
+	return request.Method
 }
 
 // GetRequestHeader 方法用于获取 HTTP 请求的 Header 部分的 http.Header。
 func (request *Request) GetRequestHeader() http.Header {
-	return request.RequestRaw.Header
+	header := make(http.Header)
+	request.Header.Range(func(key, value interface{}) bool {
+		keyStr, _ := key.(string)
+		valueStr, _ := value.(string)
+		if keyStr != "" && valueStr != "" {
+			header.Add(keyStr, valueStr)
+		}
+		return true
+	})
+	return header
+}
+func (request *Request) SetHeaderContentType(contentType string) *Request {
+	request.SetHeader("Content-Type", contentType)
+	return request
+}
+
+func (request *Request) GetHeaderContentType() string {
+	for key, value := range request.GetRequestHeader() {
+		if key == "Content-Type" {
+			return value[0]
+		}
+	}
+	return ""
 }

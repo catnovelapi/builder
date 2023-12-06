@@ -40,6 +40,7 @@ const (
 )
 
 type Response struct {
+	Request       *http.Request
 	Result        string         // 响应体字符串结果
 	ResponseRaw   *http.Response // 指向 http.Response 的指针
 	RequestSource *Request       // 指向 Request 的指针
@@ -47,8 +48,6 @@ type Response struct {
 
 // newParseUrl 方法用于解析 URL。它接收一个 string 类型的参数，该参数表示 HTTP 请求的 Path 部分。
 func (request *Request) newParseUrl(path string) (*url.URL, error) {
-	request.client.Lock()
-	defer request.client.Unlock()
 	// 如果 baseUrl 不为空，且 path 不是以 / 开头，则在 path 前加上 /
 	if request.client.GetClientBaseURL() == "" && path == "" {
 		return nil, fmt.Errorf("request Error: %s", "baseUrl is empty")
@@ -63,54 +62,59 @@ func (request *Request) newParseUrl(path string) (*url.URL, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 设置 URL, Host
-	request.RequestRaw.URL = u
-	request.RequestRaw.Host = u.Host
+	request.URL = u
+	urlRawQuery := request.GetQueryParamsEncode()
+	if request.URL.RawQuery == "" {
+		request.URL.RawQuery = urlRawQuery
+	} else {
+		request.URL.RawQuery = request.URL.RawQuery + "&" + urlRawQuery
+	}
 	return u, nil
 }
 
 // newResponse 方法用于创建一个 Response 对象。它接收两个 string 类型的参数，分别表示 HTTP 请求的方法和路径。
 func (request *Request) newResponse(method, path string) (*Response, error) {
-	_, err := request.newParseUrl(path)
+	if _, err := request.newParseUrl(path); err != nil {
+		return nil, err
+	}
+	// 设置请求方法, 如果请求方法为 GET, 则不设置请求体
+	request.Method = method
+	err := parseRequestBody(request)
 	if err != nil {
 		return nil, err
 	}
-	if request.RequestRaw.Method = method; request.RequestRaw.Method == MethodGet {
-		// GET请求不需要设置Body,因为Body会被忽略
-		request.RequestRaw.URL.RawQuery = request.GetQueryParamsEncode()
-	} else {
-		if len(request.queryParams) > 0 {
-			request.RequestRaw.Body = request.GetQueryParamsNopCloser()
-		}
+	newRequestWithContext, err := http.NewRequestWithContext(request.ctx, request.Method, request.URL.String(), request.bodyBuf)
+	if err != nil {
+		return nil, err
 	}
-	if request.client.GetClientDebug() {
-		request.client.debugLoggers.formatRequestLogText(request.client.GetClientDebug(), request)
-	}
+	// 设置请求头
+	newRequestWithContext.Header = request.GetRequestHeader()
+
+	request.client.debugLoggers.formatRequestLogText(request.client.GetClientDebug(), request)
+
 	if request.client.GetClientRetryNumber() == 0 {
+		// 如果重试次数为 0，则设置重试次数为 1
 		request.client.SetRetryCount(1)
 	}
-	response, ok := request.newDoResponse()
+	response, ok := request.newDoResponse(newRequestWithContext)
 	if ok != nil {
 		return nil, ok
 	}
-	if request.client.GetClientDebug() {
-		request.client.debugLoggers.formatResponseLogText(request.client.GetClientDebug(), response)
-	}
+	defer request.client.debugLoggers.formatResponseLogText(request.client.GetClientDebug(), response)
 	return response, nil
-
 }
 
 // newDoResponse 方法用于执行 HTTP 请求。它接收一个 Response 对象的指针，表示 HTTP 请求的响应。
-func (request *Request) newDoResponse() (*Response, error) {
+func (request *Request) newDoResponse(newRequestWithContext *http.Request) (*Response, error) {
 	var err error
 	var raw *http.Response
 	for i := 0; i < request.client.GetClientRetryNumber(); i++ {
-		raw, err = request.client.clientRaw.Do(request.RequestRaw)
+		raw, err = request.client.httpClientRaw.Do(newRequestWithContext)
 		if err != nil {
-			log.Println(fmt.Sprintf("%s Error: %s Retry:%v", request.RequestRaw.Method, err.Error(), i))
+			log.Println(fmt.Sprintf("%s Error: %s Retry:%v", request.Method, err.Error(), i))
 			continue
 		}
-		return &Response{RequestSource: request, ResponseRaw: raw}, nil
+		return &Response{RequestSource: request, ResponseRaw: raw, Request: newRequestWithContext}, nil
 	}
 	return nil, fmt.Errorf("request Error: %s", err.Error())
 }
