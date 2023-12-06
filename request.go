@@ -1,65 +1,40 @@
 package builder
 
 import (
+	"bytes"
 	"fmt"
-	"github.com/tidwall/gjson"
+	"golang.org/x/net/context"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"reflect"
 	"strings"
 	"sync"
 )
 
 type Request struct {
-	client     *Client       // 指向 Client 的指针
-	RequestRaw *http.Request // 指向 http.Request 的指针
+	URL        *url.URL
+	ctx        context.Context
+	Method     string // HTTP 请求的 Method 部分
+	Body       interface{}
+	bodyBuf    *bytes.Buffer
+	bodyBytes  []byte
+	client     *Client // 指向 Client 的指针
+	Header     sync.Map
 	QueryParam sync.Map
 	FormData   sync.Map
 	Cookies    []*http.Cookie
 }
 
-func (request *Request) SetJsonBody(v interface{}) {
-	var jsonString string
-	switch value := v.(type) {
-	case map[string]interface{}, map[string]string, *map[string]interface{}:
-		jsonMarshal, err := request.client.JSONMarshal(value)
-		if err != nil {
-			log.Println("SetBody error:", err)
-			return
-		}
-		jsonString = string(jsonMarshal)
-	case string:
-		if gjson.Valid(value) {
-			jsonString = value
-		}
-	case []byte:
-		if gjson.Valid(string(value)) {
-			jsonString = string(value)
-		}
-	default:
-		if reflect.TypeOf(value).Kind() == reflect.Struct || reflect.TypeOf(value).Kind() == reflect.Ptr {
-			jsonMarshal, err := request.client.JSONMarshal(value)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			jsonString = string(jsonMarshal)
-		}
-	}
-	if jsonString != "" {
-		request.SetHeader("Content-Type", "application/json;charset=UTF-8")
-		request.RequestRaw.ContentLength = int64(len(jsonString))
-		request.RequestRaw.Body = io.NopCloser(strings.NewReader(jsonString))
-	}
+func (request *Request) SetBody(v interface{}) *Request {
+	request.Body = v
+	return request
 }
 
 // SetHeader 方法用于设置 HTTP 请求的 Header 部分。它接收两个 string 类型的参数，
 func (request *Request) SetHeader(key, value string) *Request {
-	//request.client.Lock()
-	//defer request.client.Unlock()
-	request.RequestRaw.Header.Set(key, value)
+	//request.RequestRaw.Header.Set(key, value)
+	request.Header.Store(key, value)
 	return request
 }
 
@@ -80,9 +55,7 @@ func (request *Request) SetCookies(cookie []*http.Cookie) *Request {
 
 // SetCookie 方法用于设置 HTTP 请求的 Cookie 部分。它接收一个 *http.Cookie 类型的参数，
 func (request *Request) SetCookie(cookie *http.Cookie) *Request {
-	request.client.Lock()
-	defer request.client.Unlock()
-	request.RequestRaw.AddCookie(cookie)
+	//request.RequestRaw.AddCookie(cookie)
 	return request
 }
 
@@ -162,30 +135,52 @@ func (request *Request) GetQueryParamsNopCloser() io.ReadCloser {
 
 // GetHost 方法用于获取 HTTP 请求的 Host 部分的字符串。
 func (request *Request) GetHost() string {
-	return request.RequestRaw.URL.Host
+	return request.client.baseUrl
 }
 
 // GetPath 方法用于获取 HTTP 请求的 Path 部分的字符串。
 func (request *Request) GetPath() string {
-	return request.RequestRaw.URL.Path
+	return request.URL.Path
 }
 
 // GetUrl 方法用于获取 HTTP 请求的 URL 部分的字符串。
 func (request *Request) GetUrl() string {
-	return request.RequestRaw.URL.String()
+	return request.URL.String()
 }
 
-// GetProto 方法用于获取 HTTP 请求的 Proto 部分的字符串。
-func (request *Request) GetProto() string {
-	return request.RequestRaw.Proto
-}
+//// GetProto 方法用于获取 HTTP 请求的 Proto 部分的字符串。
+//func (request *Request) GetProto() string {
+//	return request.Proto
+//}
 
 // GetMethod 方法用于获取 HTTP 请求的 Method 部分的字符串。
 func (request *Request) GetMethod() string {
-	return request.RequestRaw.Method
+	return request.Method
 }
 
 // GetRequestHeader 方法用于获取 HTTP 请求的 Header 部分的 http.Header。
 func (request *Request) GetRequestHeader() http.Header {
-	return request.RequestRaw.Header
+	header := make(http.Header)
+	request.Header.Range(func(key, value interface{}) bool {
+		keyStr, _ := key.(string)
+		valueStr, _ := value.(string)
+		if keyStr != "" && valueStr != "" {
+			header.Add(keyStr, valueStr)
+		}
+		return true
+	})
+	return header
+}
+func (request *Request) SetHeaderContentType(contentType string) *Request {
+	request.SetHeader("Content-Type", contentType)
+	return request
+}
+
+func (request *Request) GetHeaderContentType() string {
+	for key, value := range request.GetRequestHeader() {
+		if key == "Content-Type" {
+			return value[0]
+		}
+	}
+	return ""
 }

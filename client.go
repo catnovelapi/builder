@@ -145,15 +145,10 @@ func (client *Client) SetDebugFile(name string) *Client {
 // R 方法用于创建一个新的 Request 对象。它接收一个 string 类型的参数，该参数表示 HTTP 请求的 Path 部分。
 func (client *Client) R() *Request {
 	req := &Request{
-		client: client,
-		RequestRaw: &http.Request{
-			//Body:       rc,
-			//URL:        u,
-			Proto:      "HTTP/1.1",
-			ProtoMajor: 1,
-			ProtoMinor: 1,
-			Header:     make(http.Header),
-		},
+		client:     client,
+		URL:        &url.URL{},
+		ctx:        context.Background(),
+		Header:     sync.Map{},
 		FormData:   sync.Map{},
 		QueryParam: sync.Map{},
 		Cookies:    client.Cookies,
@@ -168,7 +163,6 @@ func (client *Client) R() *Request {
 		}
 	}
 	req.SetQueryParams(client.QueryParam)
-	req.RequestRaw.WithContext(context.Background())
 	return req
 }
 

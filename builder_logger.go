@@ -75,12 +75,11 @@ func (builderLogger *LoggerClient) formatRequestLogText(debug bool, request *Req
 	var body string
 	if body = request.GetQueryParamsEncode(); body == "" {
 		if body = request.GetFormDataEncode(); body == "" {
-			body = "this request has no body"
-		}
-	}
-	if body == "" {
-		if request.RequestRaw.Body != nil {
-			body = fmt.Sprintf("%v", request.RequestRaw.Body)
+			if request.bodyBytes != nil {
+				body = string(request.bodyBytes)
+			} else {
+				body = "this request has no body"
+			}
 		}
 	}
 	formatText := formatLog("\n==============================================================================\n"+
@@ -93,7 +92,7 @@ func (builderLogger *LoggerClient) formatRequestLogText(debug bool, request *Req
 		"------------------------------------------------------------------------------\n",
 		request.GetMethod(),
 		request.GetHost(),
-		request.GetProto(),
+		"request.GetProto()",
 		request.GetPath(),
 		composeHeaders(copyHeaders(request.GetRequestHeader())),
 		request.GetRequestHeader().Get("Cookies"),
