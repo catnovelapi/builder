@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
@@ -83,6 +84,10 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 	if err != nil {
 		return nil, err
 	}
+	if request.bodyBuf == nil {
+		request.bodyBuf = &bytes.Buffer{}
+	}
+
 	newRequestWithContext, err := http.NewRequestWithContext(request.ctx, request.Method, request.URL.String(), request.bodyBuf)
 	if err != nil {
 		return nil, err
