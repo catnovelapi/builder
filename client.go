@@ -102,7 +102,6 @@ func NewClient() *Client {
 	client.SetRetryCount(defaultRetryCount)
 	// 默认 User-Agent 为随机生成的浏览器 User-Agent
 	client.SetUserAgent(browser.Random())
-	client.debugLoggers = NewLoggerClient(os.Stdout)
 	return client
 }
 
