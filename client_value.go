@@ -17,7 +17,7 @@ func (client *Client) GetClientBaseURL() string {
 
 // GetClientDebug 方法用于获取 HTTP 请求的 Debug 部分。它返回一个 bool 类型的参数。
 func (client *Client) GetClientDebug() bool {
-	return client.debug
+	return client.Debug
 }
 
 // GetClientRetryNumber 方法用于获取 HTTP 请求的 RetryNumber 部分。它返回一个 int 类型的参数。

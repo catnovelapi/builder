@@ -94,8 +94,9 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 	}
 	// 设置请求头
 	newRequestWithContext.Header = request.GetRequestHeader()
-
-	request.client.debugLoggers.formatRequestLogText(request.client.GetClientDebug(), request)
+	if request.client.GetClientDebug() {
+		request.client.debugLoggers.formatRequestLogText(request)
+	}
 
 	if request.client.GetClientRetryNumber() == 0 {
 		// 如果重试次数为 0，则设置重试次数为 1
@@ -105,7 +106,9 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 	if ok != nil {
 		return nil, ok
 	}
-	defer request.client.debugLoggers.formatResponseLogText(request.client.GetClientDebug(), response)
+	if request.client.GetClientDebug() {
+		defer request.client.debugLoggers.formatResponseLogText(response)
+	}
 	return response, nil
 }
 

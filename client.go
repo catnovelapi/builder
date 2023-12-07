@@ -117,21 +117,31 @@ func (client *Client) SetContentType(contentType string) *Client {
 	client.Header["Content-Type"] = contentType
 	return client
 }
+func SplitFile(name string) error {
+	fileInfo, err := os.Stat(name + ".txt")
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	if fileInfo.Size() > 1024*1024 {
+		newName := name + fileInfo.ModTime().Format("20060102") + ".txt"
+		if err = os.Rename(name+".txt", newName); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
 
 // SetDebugFile 方法用于设置输出调试信息的文件。它接收一个 string 类型的参数，该参数表示文件名。
 func (client *Client) SetDebugFile(name string) *Client {
-	if fileInfo, err := os.Stat(name + ".txt"); err != nil {
-		if !os.IsNotExist(err) {
-			log.Println(err)
-		}
-	} else {
-		if fileInfo.Size() > 1024*1024 {
-			newName := name + fileInfo.ModTime().Format("20060102") + ".txt"
-			if err = os.Rename(name+".txt", newName); err != nil {
-				log.Println(err)
-			}
-		}
+	err := SplitFile(name)
+	if err != nil {
+		log.Println("SetDebugFile error: ", err)
+		return nil
 	}
+	client.Debug = true
 	file, err := os.OpenFile(name+".txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		log.Println("SetDebugFile error: ", err)
@@ -189,6 +199,7 @@ func (client *Client) SetResultFunc(f func(v string) (string, error)) *Client {
 // SetDebug 方法用于设置是否输出调试信息,如果调用该方法，那么将输出调试信息。
 func (client *Client) SetDebug() *Client {
 	client.Debug = true
+	client.debugLoggers = NewLoggerClient(os.Stdout)
 	return client
 }
 
