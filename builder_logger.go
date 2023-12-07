@@ -71,7 +71,7 @@ func NewLoggerClient(debugFile *os.File) *LoggerClient {
 }
 
 // formatRequestLogText 方法用于格式化 HTTP 请求的日志信息。
-func (builderLogger *LoggerClient) formatRequestLogText(debug bool, request *Request) {
+func (builderLogger *LoggerClient) formatRequestLogText(request *Request) {
 	var body string
 	if body = request.GetQueryParamsEncode(); body == "" {
 		if body = request.GetFormDataEncode(); body == "" {
@@ -98,9 +98,6 @@ func (builderLogger *LoggerClient) formatRequestLogText(debug bool, request *Req
 		request.GetRequestHeader().Get("Cookies"),
 		body,
 	)
-	if debug {
-		fmt.Println(formatText)
-	}
 	if builderLogger.debugFile != nil {
 		if _, err := builderLogger.debugFile.WriteString(formatText); err != nil {
 			builderLogger.loggerArray = append(builderLogger.loggerArray, err.Error())
@@ -109,7 +106,7 @@ func (builderLogger *LoggerClient) formatRequestLogText(debug bool, request *Req
 }
 
 // formatResponseLogText 方法用于格式化 HTTP 响应的日志信息。
-func (builderLogger *LoggerClient) formatResponseLogText(debug bool, response *Response) string {
+func (builderLogger *LoggerClient) formatResponseLogText(response *Response) string {
 	var repLogText string
 	if cookies := response.GetCookies(); cookies != nil {
 		repLogText += "  Cookies:\n"
@@ -128,9 +125,6 @@ func (builderLogger *LoggerClient) formatResponseLogText(debug bool, response *R
 		response.GetStatus(),
 		composeHeaders(response.GetHeader()),
 		indentJson(response.String()))
-	if debug {
-		fmt.Println(formatText)
-	}
 	if builderLogger.debugFile != nil {
 		if _, err := builderLogger.debugFile.WriteString(formatText); err != nil {
 			builderLogger.loggerArray = append(builderLogger.loggerArray, err.Error())
