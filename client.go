@@ -47,7 +47,6 @@ type Client struct {
 	MaxConcurrent          chan struct{}     // 用于限制并发数
 	timeout                int               // timeout 用于存储 HTTP 请求的 Timeout 部分
 	baseUrl                string            // baseUrl 用于存储 HTTP 请求的 BaseUrl 部分
-	debug                  bool              // debug 用于存储是否输出调试信息
 	debugLoggers           *LoggerClient     // debugLoggers 用于存储调试信息的文件
 	httpClientRaw          *http.Client      // httpClientRaw 用于存储 http.Client 的指针
 	Header                 map[string]string // Header 用于存储 HTTP 请求的 Header 部分
@@ -103,6 +102,7 @@ func NewClient() *Client {
 	client.SetRetryCount(defaultRetryCount)
 	// 默认 User-Agent 为随机生成的浏览器 User-Agent
 	client.SetUserAgent(browser.Random())
+	client.debugLoggers = NewLoggerClient(os.Stdout)
 	return client
 }
 
@@ -136,7 +136,6 @@ func (client *Client) SetDebugFile(name string) *Client {
 	if err != nil {
 		log.Println("SetDebugFile error: ", err)
 	} else {
-		//client.debugFile = file
 		client.debugLoggers = NewLoggerClient(file)
 	}
 	return client
@@ -189,7 +188,7 @@ func (client *Client) SetResultFunc(f func(v string) (string, error)) *Client {
 
 // SetDebug 方法用于设置是否输出调试信息,如果调用该方法，那么将输出调试信息。
 func (client *Client) SetDebug() *Client {
-	client.debug = true
+	client.Debug = true
 	return client
 }
 
