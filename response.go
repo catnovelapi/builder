@@ -65,27 +65,15 @@ func (request *Request) newParseUrl(path string) (*url.URL, error) {
 	return u, nil
 }
 
-// newRequestWithContext 方法用于创建一个 Response 对象。它接收两个 string 类型的参数，分别表示 HTTP 请求的方法和路径。
-func (request *Request) newRequestWithContext(method, path string) (*http.Request, error) {
+// newRequestWithContext 方法用于创建一个 HTTP 请求。它接收一个 string 类型的参数，该参数表示 HTTP 请求的 Path 部分。
+func (request *Request) newRequestWithContext() (*http.Request, error) {
 	defer func() {
 		request.client.log.WithFields(newFormatRequestLogText(request)).Debug("request debug")
 		request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
 	}()
-	if _, err := request.newParseUrl(path); err != nil {
-		return nil, err
-	}
-	// 设置请求方法, 如果请求方法为 GET, 则不设置请求体
-	request.Method = method
-	if err := parseRequestBody(request); err != nil {
-		request.client.LogError(err, path, "util.go", "parseRequestBody")
-		return nil, err
-	}
-	if request.bodyBuf == nil {
-		request.bodyBuf = &bytes.Buffer{}
-	}
 	req, err := http.NewRequestWithContext(request.ctx, request.Method, request.URL.String(), request.bodyBuf)
 	if err != nil {
-		request.client.LogError(err, path, "response.go", "http.NewRequestWithContext")
+		request.client.LogError(err, request.Method, "response.go", "http.NewRequestWithContext")
 		return nil, err
 	}
 	// 设置请求头
@@ -105,7 +93,19 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 			request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
 		}
 	}()
-	request.NewRequest, err = request.newRequestWithContext(method, path)
+	request.Method = method
+	if _, err = request.newParseUrl(path); err != nil {
+		return nil, err
+	}
+	// 设置请求方法, 如果请求方法为 GET, 则不设置请求体
+	if err = parseRequestBody(request); err != nil {
+		request.client.LogError(err, path, "util.go", "parseRequestBody")
+		return nil, err
+	}
+	if request.bodyBuf == nil {
+		request.bodyBuf = &bytes.Buffer{}
+	}
+	request.NewRequest, err = request.newRequestWithContext()
 	if err != nil {
 		return nil, err
 	}
