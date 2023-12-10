@@ -111,12 +111,7 @@ func NewClient() *Client {
 
 // SetBaseURL 方法用于设置HTTP请求的 BaseUrl 部分。它接收一个 string 类型的参数，该参数表示 BaseUrl 的值。
 func (client *Client) SetBaseURL(baseUrl string) *Client {
-	baseUrl = strings.TrimRight(baseUrl, "/")
-	if !strings.HasPrefix(client.baseUrl, "http") {
-		client.LogInfo("baseURL must be url", client.baseUrl, "SetBaseURL")
-	} else {
-		client.baseUrl = baseUrl
-	}
+	client.baseUrl = strings.TrimRight(baseUrl, "/")
 	return client
 }
 

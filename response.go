@@ -87,6 +87,9 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 	}
 	// 设置请求头
 	newRequestWithContext.Header = request.GetRequestHeader()
+	for _, v := range request.Cookies {
+		newRequestWithContext.AddCookie(v)
+	}
 	if request.client.GetClientDebug() {
 		request.client.log.WithFields(newFormatRequestLogText(request)).Debug("request debug")
 		request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))

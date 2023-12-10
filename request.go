@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"golang.org/x/net/context"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -55,7 +54,7 @@ func (request *Request) SetCookies(cookie []*http.Cookie) *Request {
 
 // SetCookie 方法用于设置 HTTP 请求的 Cookie 部分。它接收一个 *http.Cookie 类型的参数，
 func (request *Request) SetCookie(cookie *http.Cookie) *Request {
-	//request.RequestRaw.AddCookie(cookie)
+	request.Cookies = append(request.Cookies, cookie)
 	return request
 }
 
@@ -85,14 +84,18 @@ func (request *Request) SetFormDataMany(params map[string]string) *Request {
 
 // SetQueryString 方法用于设置 HTTP 请求的 Query 部分。它接收一个 string 类型的参数，
 func (request *Request) SetQueryString(query string) *Request {
-	params, err := url.ParseQuery(strings.TrimSpace(query))
-	if err == nil {
+	if params, err := url.ParseQuery(strings.TrimSpace(query)); err == nil {
 		for key, value := range params {
 			request.SetQueryParam(key, value[0])
 		}
 	} else {
-		log.Println("SetQueryString url.ParseQuery error:", err)
+		request.client.LogError(err, query, "request.go", "SetQueryString")
 	}
+	return request
+}
+
+func (request *Request) SetHeaderContentType(contentType string) *Request {
+	request.SetHeader("Content-Type", contentType)
 	return request
 }
 
@@ -148,11 +151,6 @@ func (request *Request) GetUrl() string {
 	return request.URL.String()
 }
 
-//// GetProto 方法用于获取 HTTP 请求的 Proto 部分的字符串。
-//func (request *Request) GetProto() string {
-//	return request.Proto
-//}
-
 // GetMethod 方法用于获取 HTTP 请求的 Method 部分的字符串。
 func (request *Request) GetMethod() string {
 	return request.Method
@@ -171,11 +169,6 @@ func (request *Request) GetRequestHeader() http.Header {
 	})
 	return header
 }
-func (request *Request) SetHeaderContentType(contentType string) *Request {
-	request.SetHeader("Content-Type", contentType)
-	return request
-}
-
 func (request *Request) GetHeaderContentType() string {
 	for key, value := range request.GetRequestHeader() {
 		if key == "Content-Type" {
