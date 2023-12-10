@@ -65,8 +65,12 @@ func (request *Request) newParseUrl(path string) (*url.URL, error) {
 	return u, nil
 }
 
-// newResponse 方法用于创建一个 Response 对象。它接收两个 string 类型的参数，分别表示 HTTP 请求的方法和路径。
-func (request *Request) newResponse(method, path string) (*Response, error) {
+// newRequestWithContext 方法用于创建一个 Response 对象。它接收两个 string 类型的参数，分别表示 HTTP 请求的方法和路径。
+func (request *Request) newRequestWithContext(method, path string) (*http.Request, error) {
+	defer func() {
+		request.client.log.WithFields(newFormatRequestLogText(request)).Debug("request debug")
+		request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
+	}()
 	if _, err := request.newParseUrl(path); err != nil {
 		return nil, err
 	}
@@ -79,47 +83,65 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 	if request.bodyBuf == nil {
 		request.bodyBuf = &bytes.Buffer{}
 	}
-
-	newRequestWithContext, err := http.NewRequestWithContext(request.ctx, request.Method, request.URL.String(), request.bodyBuf)
+	req, err := http.NewRequestWithContext(request.ctx, request.Method, request.URL.String(), request.bodyBuf)
 	if err != nil {
 		request.client.LogError(err, path, "response.go", "http.NewRequestWithContext")
 		return nil, err
 	}
 	// 设置请求头
-	newRequestWithContext.Header = request.GetRequestHeader()
+	req.Header = request.GetRequestHeader()
 	for _, v := range request.Cookies {
-		newRequestWithContext.AddCookie(v)
+		req.AddCookie(v)
 	}
-	if request.client.GetClientDebug() {
-		request.client.log.WithFields(newFormatRequestLogText(request)).Debug("request debug")
-		request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
+	return req, nil
+}
+
+func (request *Request) newResponse(method, path string) (*Response, error) {
+	var err error
+	var response *Response
+	defer func() {
+		if request.client.GetClientDebug() {
+			request.client.log.WithFields(newFormatResponseLogText(response)).Debug("response debug")
+			request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
+		}
+	}()
+	request.NewRequest, err = request.newRequestWithContext(method, path)
+	if err != nil {
+		return nil, err
 	}
 	if request.client.GetClientRetryNumber() == 0 {
 		// 如果重试次数为 0，则设置重试次数为 1
 		request.client.SetRetryCount(1)
 	}
-	response, ok := request.newDoResponse(newRequestWithContext)
-	if ok != nil {
-		return nil, ok
+	response, err = request.newDoRequest()
+	if err != nil {
+		request.client.LogError(err, path, "response.go", "newDoRequest")
+		return nil, err
 	}
-	if request.client.GetClientDebug() {
-		request.client.log.WithFields(newFormatResponseLogText(response)).Debug("response debug")
-		request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
+	if request.client.setResultFunc != nil {
+		response.Result, err = request.client.setResultFunc(response.String())
+		if err != nil || response.Result == "" {
+			request.client.LogError(err, path, "response.go", "setResultFunc")
+			response.Result = response.String()
+			return nil, err
+		}
+	} else {
+		response.Result = response.String()
 	}
 	return response, nil
 }
 
 // newDoResponse 方法用于执行 HTTP 请求。它接收一个 Response 对象的指针，表示 HTTP 请求的响应。
-func (request *Request) newDoResponse(newRequestWithContext *http.Request) (*Response, error) {
+func (request *Request) newDoRequest() (*Response, error) {
 	var err error
 	var raw *http.Response
 	for i := 0; i < request.client.GetClientRetryNumber(); i++ {
-		raw, err = request.client.httpClientRaw.Do(newRequestWithContext)
+		raw, err = request.client.httpClientRaw.Do(request.NewRequest)
 		if err != nil {
 			request.client.LogError(err, fmt.Sprintf("retry:%v", i), "response.go", "httpClientRaw.Do")
 			continue
 		}
-		return &Response{RequestSource: request, ResponseRaw: raw, Request: newRequestWithContext}, nil
+		return &Response{RequestSource: request, ResponseRaw: raw, Request: request.NewRequest}, nil
 	}
 	return nil, fmt.Errorf("request Error: %s", err.Error())
 }

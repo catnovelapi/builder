@@ -51,17 +51,7 @@ func (response *Response) GetByte() []byte {
 	if ok != nil {
 		return nil
 	}
-	if response.RequestSource.client.setResultFunc != nil {
-		result, err := response.RequestSource.client.setResultFunc(string(body))
-		if err != nil {
-			response.Result = string(body)
-		} else {
-			response.Result = result
-		}
-	} else {
-		response.Result = string(body)
-	}
-	return []byte(response.Result)
+	return body
 }
 
 // String 方法用于获取 HTTP 响应的字符串结果。

@@ -23,6 +23,7 @@ type Request struct {
 	QueryParam sync.Map
 	FormData   sync.Map
 	Cookies    []*http.Cookie
+	NewRequest *http.Request
 }
 
 func (request *Request) SetBody(v interface{}) *Request {
