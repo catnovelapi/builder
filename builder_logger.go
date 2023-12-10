@@ -3,28 +3,17 @@ package builder
 import (
 	"encoding/json"
 	"github.com/sirupsen/logrus"
-	"github.com/tidwall/gjson"
-	"log"
 	"net/http"
 )
 
 // indentJson 方法用于格式化 JSON 字符串。它接收一个 string 类型的参数，该参数表示 JSON 字符串。
-func indentJson(a string) string {
-	// 判断是否为 JSON 字符串, 如果不是则直接返回
-	if !gjson.Valid(a) {
-		return a
-	}
+func indentJson(a string) (map[string]*json.RawMessage, error) {
 	var objmap map[string]*json.RawMessage
 	err := json.Unmarshal([]byte(a), &objmap)
 	if err != nil {
-		log.Println("indentJson:解析 JSON 字符串失败")
-		return a + "\n" + err.Error()
+		return nil, err
 	}
-	formatted, err := json.MarshalIndent(objmap, "", "  ")
-	if err != nil {
-		return a + "\n" + err.Error()
-	}
-	return string(formatted)
+	return objmap, nil
 }
 func header2Map(header http.Header) map[string]string {
 	h := make(map[string]string)
@@ -68,8 +57,14 @@ func newFormatResponseLogText(response *Response) logrus.Fields {
 	fields := logrus.Fields{
 		"Code":   response.GetStatusCode(),
 		"Status": response.GetStatus(),
+		"Proto":  response.GetProto(),
 		"Header": h,
-		"Result": response.String(),
+	}
+	result := response.String()
+	if objmap, err := indentJson(result); err != nil {
+		fields["Result"] = result
+	} else {
+		fields["Result"] = objmap
 	}
 	if cookies := h["Cookie"]; cookies != "" {
 		fields["Cookie"] = cookies
