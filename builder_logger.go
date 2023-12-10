@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-// indentJson 方法用于格式化 JSON 字符串。它接收一个 string 类型的参数，该参数表示 JSON 字符串。
+// indentJson 方法用于格式化 JSON 字符串成为 map[string]*json.RawMessage 类型。
 func indentJson(a string) (map[string]*json.RawMessage, error) {
 	var objmap map[string]*json.RawMessage
 	err := json.Unmarshal([]byte(a), &objmap)

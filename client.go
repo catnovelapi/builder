@@ -60,7 +60,6 @@ type Client struct {
 	Debug                  bool
 	AllowGetMethodPayload  bool
 	RetryCount             int
-	RetryWaitTime          time.Duration
 	JSONMarshal            func(v interface{}) ([]byte, error)
 	JSONUnmarshal          func(data []byte, v interface{}) error
 	XMLMarshal             func(v interface{}) ([]byte, error)
@@ -69,10 +68,7 @@ type Client struct {
 	body                   interface{} // body 用于存储 HTTP 请求的 Body 部分
 }
 
-const (
-	defaultRetryCount = 3
-	defaultWaitTime   = 100
-)
+const defaultRetryCount = 3
 
 // NewClient 方法用于创建一个新的 Client 对象, 并返回该对象的指针。
 func NewClient() *Client {
@@ -83,7 +79,6 @@ func NewClient() *Client {
 		Header:                 map[string]string{},      // 初始化 Header
 		FormData:               map[string]string{},
 		Cookies:                make([]*http.Cookie, 0),
-		RetryWaitTime:          defaultWaitTime,
 		log:                    logrus.New(),
 		JSONMarshal:            json.Marshal,
 		JSONUnmarshal:          json.Unmarshal,
@@ -102,7 +97,7 @@ func NewClient() *Client {
 	client.log.SetFormatter(&logrus.JSONFormatter{PrettyPrint: true})
 	client.log.SetOutput(os.Stdout)
 
-	// 设置日志级别为warn以上
+	// 设置日志级别为DebugLevel
 	client.log.SetLevel(logrus.DebugLevel)
 
 	// 默认超时时间为 30 秒
@@ -116,7 +111,12 @@ func NewClient() *Client {
 
 // SetBaseURL 方法用于设置HTTP请求的 BaseUrl 部分。它接收一个 string 类型的参数，该参数表示 BaseUrl 的值。
 func (client *Client) SetBaseURL(baseUrl string) *Client {
-	client.baseUrl = strings.TrimRight(baseUrl, "/")
+	baseUrl = strings.TrimRight(baseUrl, "/")
+	if !strings.HasPrefix(client.baseUrl, "http") {
+		client.LogInfo("baseURL must be url", client.baseUrl, "SetBaseURL")
+	} else {
+		client.baseUrl = baseUrl
+	}
 	return client
 }
 
