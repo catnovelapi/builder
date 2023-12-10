@@ -5,6 +5,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 	"log"
+	"net/http"
 )
 
 // indentJson 方法用于格式化 JSON 字符串。它接收一个 string 类型的参数，该参数表示 JSON 字符串。
@@ -25,6 +26,13 @@ func indentJson(a string) string {
 	}
 	return string(formatted)
 }
+func header2Map(header http.Header) map[string]string {
+	h := make(map[string]string)
+	for k, v := range header {
+		h[k] = v[0]
+	}
+	return h
+}
 
 // newFormatRequestLogText 方法用于格式化 HTTP 请求的日志信息。
 func newFormatRequestLogText(request *Request) logrus.Fields {
@@ -38,31 +46,35 @@ func newFormatRequestLogText(request *Request) logrus.Fields {
 			}
 		}
 	}
-	h := request.GetRequestHeader()
+	h := header2Map(request.GetRequestHeader())
 	fields := logrus.Fields{
 		"Method":  request.GetMethod(),
 		"Host":    request.GetHost(),
 		"Path":    request.GetPath(),
 		"HEADERS": h,
-		"Cookies": h.Get("Cookies"),
 		"BODY":    body,
+	}
+	if cookies := h["Cookie"]; cookies != "" {
+		fields["Cookie"] = cookies
+	} else {
+		fields["Cookie"] = "this request has no cookies"
 	}
 	return fields
 }
 
 // newFormatResponseLogText 方法用于格式化 HTTP 响应的日志信息。
 func newFormatResponseLogText(response *Response) logrus.Fields {
-	h := response.GetHeader()
+	h := header2Map(response.GetHeader())
 	fields := logrus.Fields{
 		"Code":   response.GetStatusCode(),
 		"Status": response.GetStatus(),
 		"Header": h,
 		"Result": response.String(),
 	}
-	if cookies := h.Get("Cookies"); cookies != "" {
-		fields["Cookies"] = cookies
+	if cookies := h["Cookie"]; cookies != "" {
+		fields["Cookie"] = cookies
 	} else {
-		fields["Cookies"] = "this response has no cookies"
+		fields["Cookie"] = "this response has no cookies"
 	}
 	return fields
 }
