@@ -2,19 +2,9 @@ package builder
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
-	"github.com/tidwall/gjson"
-	"golang.org/x/net/html"
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"golang.org/x/text/transform"
-	"io"
-	"log"
 	"net/http"
 	"net/url"
-	"reflect"
-	"strings"
 )
 
 const (
@@ -51,7 +41,9 @@ type Response struct {
 func (request *Request) newParseUrl(path string) (*url.URL, error) {
 	// 如果 baseUrl 不为空，且 path 不是以 / 开头，则在 path 前加上 /
 	if request.client.GetClientBaseURL() == "" && path == "" {
-		return nil, fmt.Errorf("request Error: %s", "baseUrl is empty")
+		err := fmt.Errorf("request Error: %s", "baseUrl is empty")
+		request.client.LogError(err, path, "response.go", "newParseUrl")
+		return nil, err
 	}
 	if request.client.GetClientBaseURL() != "" && path != "" {
 		if path[0] != '/' {
@@ -73,56 +65,83 @@ func (request *Request) newParseUrl(path string) (*url.URL, error) {
 	return u, nil
 }
 
-// newResponse 方法用于创建一个 Response 对象。它接收两个 string 类型的参数，分别表示 HTTP 请求的方法和路径。
+// newRequestWithContext 方法用于创建一个 HTTP 请求。它接收一个 string 类型的参数，该参数表示 HTTP 请求的 Path 部分。
+func (request *Request) newRequestWithContext() (*http.Request, error) {
+	defer func() {
+		request.client.log.WithFields(newFormatRequestLogText(request)).Debug("request debug")
+		request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
+	}()
+	req, err := http.NewRequestWithContext(request.ctx, request.Method, request.URL.String(), request.bodyBuf)
+	if err != nil {
+		request.client.LogError(err, request.Method, "response.go", "http.NewRequestWithContext")
+		return nil, err
+	}
+	// 设置请求头
+	req.Header = request.GetRequestHeader()
+	for _, v := range request.Cookies {
+		req.AddCookie(v)
+	}
+	return req, nil
+}
+
 func (request *Request) newResponse(method, path string) (*Response, error) {
-	if _, err := request.newParseUrl(path); err != nil {
+	var err error
+	var response *Response
+	defer func() {
+		if request.client.GetClientDebug() {
+			request.client.log.WithFields(newFormatResponseLogText(response)).Debug("response debug")
+			request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
+		}
+	}()
+	request.Method = method
+	if _, err = request.newParseUrl(path); err != nil {
 		return nil, err
 	}
 	// 设置请求方法, 如果请求方法为 GET, 则不设置请求体
-	request.Method = method
-	err := parseRequestBody(request)
-	if err != nil {
+	if err = parseRequestBody(request); err != nil {
+		request.client.LogError(err, path, "util.go", "parseRequestBody")
 		return nil, err
 	}
 	if request.bodyBuf == nil {
 		request.bodyBuf = &bytes.Buffer{}
 	}
-
-	newRequestWithContext, err := http.NewRequestWithContext(request.ctx, request.Method, request.URL.String(), request.bodyBuf)
+	request.NewRequest, err = request.newRequestWithContext()
 	if err != nil {
 		return nil, err
 	}
-	// 设置请求头
-	newRequestWithContext.Header = request.GetRequestHeader()
-	if request.client.GetClientDebug() {
-		request.client.debugLoggers.formatRequestLogText(request)
-	}
-
 	if request.client.GetClientRetryNumber() == 0 {
 		// 如果重试次数为 0，则设置重试次数为 1
 		request.client.SetRetryCount(1)
 	}
-	response, ok := request.newDoResponse(newRequestWithContext)
-	if ok != nil {
-		return nil, ok
+	response, err = request.newDoRequest()
+	if err != nil {
+		request.client.LogError(err, path, "response.go", "newDoRequest")
+		return nil, err
 	}
-	if request.client.GetClientDebug() {
-		defer request.client.debugLoggers.formatResponseLogText(response)
+	if request.client.setResultFunc != nil {
+		response.Result, err = request.client.setResultFunc(response.String())
+		if err != nil || response.Result == "" {
+			request.client.LogError(err, path, "response.go", "setResultFunc")
+			response.Result = response.String()
+			return nil, err
+		}
+	} else {
+		response.Result = response.String()
 	}
 	return response, nil
 }
 
 // newDoResponse 方法用于执行 HTTP 请求。它接收一个 Response 对象的指针，表示 HTTP 请求的响应。
-func (request *Request) newDoResponse(newRequestWithContext *http.Request) (*Response, error) {
+func (request *Request) newDoRequest() (*Response, error) {
 	var err error
 	var raw *http.Response
 	for i := 0; i < request.client.GetClientRetryNumber(); i++ {
-		raw, err = request.client.httpClientRaw.Do(newRequestWithContext)
+		raw, err = request.client.httpClientRaw.Do(request.NewRequest)
 		if err != nil {
-			log.Println(fmt.Sprintf("%s Error: %s Retry:%v", request.Method, err.Error(), i))
+			request.client.LogError(err, fmt.Sprintf("retry:%v", i), "response.go", "httpClientRaw.Do")
 			continue
 		}
-		return &Response{RequestSource: request, ResponseRaw: raw, Request: newRequestWithContext}, nil
+		return &Response{RequestSource: request, ResponseRaw: raw, Request: request.NewRequest}, nil
 	}
 	return nil, fmt.Errorf("request Error: %s", err.Error())
 }
@@ -160,120 +179,4 @@ func (request *Request) Head(url string) (*Response, error) {
 // Options 方法用于创建一个 OPTIONS 请求。它接收一个 string 类型的参数，表示 HTTP 请求的路径。
 func (request *Request) Options(url string) (*Response, error) {
 	return request.newResponse(MethodOptions, url)
-}
-
-// GetStatusCode 方法用于获取 HTTP 响应的状态码。
-func (response *Response) GetStatusCode() int {
-	return response.ResponseRaw.StatusCode
-}
-
-func (response *Response) IsStatusOk() bool {
-	return response.ResponseRaw.StatusCode == 200
-}
-
-// GetStatus 方法用于获取 HTTP 响应的状态。
-func (response *Response) GetStatus() string {
-	return response.ResponseRaw.Status
-}
-func (response *Response) GetProto() string {
-	return response.ResponseRaw.Proto
-}
-
-// GetByte 方法用于获取 HTTP 响应的字节结果。
-func (response *Response) GetByte() []byte {
-	// 如果响应体为空，直接返回 nil
-	if response.ResponseRaw.Body == nil {
-		return nil
-	}
-	// 如果响应体不为空，且 Result 不为空，则直接返回 Result
-	if response.Result != "" {
-		return []byte(response.Result)
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			log.Println("GetByte Body.Close Error:", err)
-		}
-	}(response.ResponseRaw.Body)
-	body, ok := io.ReadAll(response.ResponseRaw.Body)
-	if ok != nil {
-		return nil
-	}
-	if response.RequestSource.client.setResultFunc != nil {
-		result, err := response.RequestSource.client.setResultFunc(string(body))
-		if err != nil {
-			response.Result = string(body)
-		} else {
-			response.Result = result
-		}
-	} else {
-		response.Result = string(body)
-	}
-	return []byte(response.Result)
-}
-
-// String 方法用于获取 HTTP 响应的字符串结果。
-func (response *Response) String() string {
-	return string(response.GetByte())
-}
-
-// Json 方法用于将 HTTP 响应的字符串结果解析为 JSON 对象。它接收一个 interface{} 类型的参数，该参数必须是指针类型。
-func (response *Response) Json(v any) error {
-	valueType := reflect.TypeOf(v)
-	if valueType.Kind() != reflect.Ptr {
-		return fmt.Errorf("DecodeJson:传入的对象必须是指针类型")
-	}
-	return json.NewDecoder(strings.NewReader(response.String())).Decode(v)
-}
-
-// StringGbk 方法用于将 HTTP 响应的字符串结果解码为 GBK 编码的字符串。
-func (response *Response) StringGbk() string {
-	decoder := simplifiedchinese.GBK.NewDecoder()
-	utf8BodyReader := transform.NewReader(strings.NewReader(response.String()), decoder)
-	utf8Body, err := io.ReadAll(utf8BodyReader)
-	if err != nil {
-		fmt.Println("解码失败:", err)
-		return ""
-	}
-	return string(utf8Body)
-}
-
-// Html 方法用于将 HTTP 响应的字符串结果解析为 HTML 文档。
-func (response *Response) Html() *goquery.Document {
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(response.String()))
-	if err != nil {
-		log.Printf("读取响应体失败: %s", err)
-		return nil
-	}
-	return doc
-}
-
-// HtmlGbk 方法用于将 HTTP 响应的字符串结果解析为 GBK 编码的 HTML 文档。
-func (response *Response) HtmlGbk() *goquery.Document {
-	docs, err := html.Parse(strings.NewReader(response.StringGbk()))
-	if err != nil {
-		fmt.Println("解析HTML失败:", err)
-		return nil
-	}
-	doc := goquery.NewDocumentFromNode(docs)
-	if err != nil {
-		fmt.Println("解析HTML失败:", err)
-		return nil
-	}
-	return doc
-}
-
-// Gjson 方法用于将 HTTP 响应的字符串结果解析为 gjson.Result 对象。
-func (response *Response) Gjson() gjson.Result {
-	return gjson.Parse(response.String())
-}
-
-// GetHeader 方法用于获取 HTTP 响应的 Header 部分。
-func (response *Response) GetHeader() http.Header {
-	return response.ResponseRaw.Header
-}
-
-// GetCookies 方法用于获取 HTTP 响应的 Cookies 部分。
-func (response *Response) GetCookies() []*http.Cookie {
-	return response.ResponseRaw.Cookies()
 }
