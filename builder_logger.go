@@ -3,10 +3,10 @@ package builder
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 	"log"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 )
@@ -60,18 +60,8 @@ func composeHeaders(hdrs http.Header) string {
 	return strings.Join(str, "\n")
 }
 
-type LoggerClient struct {
-	loggerArray []string
-	debugFile   *os.File
-}
-
-// NewLoggerClient 方法用于创建一个 LoggerClient 对象, 它接收一个 *os.File 类型的参数，该参数表示日志文件。
-func NewLoggerClient(debugFile *os.File) *LoggerClient {
-	return &LoggerClient{debugFile: debugFile}
-}
-
 // formatRequestLogText 方法用于格式化 HTTP 请求的日志信息。
-func (builderLogger *LoggerClient) formatRequestLogText(request *Request) {
+func formatRequestLogText(request *Request) string {
 	var body string
 	if body = request.GetQueryParamsEncode(); body == "" {
 		if body = request.GetFormDataEncode(); body == "" {
@@ -82,7 +72,7 @@ func (builderLogger *LoggerClient) formatRequestLogText(request *Request) {
 			}
 		}
 	}
-	formatText := formatLog("\n==============================================================================\n"+
+	return formatLog("\n==============================================================================\n"+
 		"~~~ REQUEST ~~~\n"+
 		"%s %s %s\n"+
 		"PATH   : %v\n"+
@@ -98,15 +88,34 @@ func (builderLogger *LoggerClient) formatRequestLogText(request *Request) {
 		request.GetRequestHeader().Get("Cookies"),
 		body,
 	)
-	if builderLogger.debugFile != nil {
-		if _, err := builderLogger.debugFile.WriteString(formatText); err != nil {
-			builderLogger.loggerArray = append(builderLogger.loggerArray, err.Error())
+}
+
+// newFormatRequestLogText 方法用于格式化 HTTP 请求的日志信息。
+func newFormatRequestLogText(request *Request) logrus.Fields {
+	var body string
+	if body = request.GetQueryParamsEncode(); body == "" {
+		if body = request.GetFormDataEncode(); body == "" {
+			if request.bodyBytes != nil {
+				body = string(request.bodyBytes)
+			} else {
+				body = "this request has no body"
+			}
 		}
 	}
+	h := request.GetRequestHeader()
+	fields := logrus.Fields{
+		"Method":  request.GetMethod(),
+		"Host":    request.GetHost(),
+		"Path":    request.GetPath(),
+		"HEADERS": h,
+		"Cookies": h.Get("Cookies"),
+		"BODY":    body,
+	}
+	return fields
 }
 
 // formatResponseLogText 方法用于格式化 HTTP 响应的日志信息。
-func (builderLogger *LoggerClient) formatResponseLogText(response *Response) string {
+func formatResponseLogText(response *Response) string {
 	var repLogText string
 	if cookies := response.GetCookies(); cookies != nil {
 		repLogText += "  Cookies:\n"
@@ -114,7 +123,7 @@ func (builderLogger *LoggerClient) formatResponseLogText(response *Response) str
 			repLogText += fmt.Sprintf("    %s=%s", cookie.Name, cookie.Value)
 		}
 	}
-	formatText := formatLog("\n\n"+
+	return formatLog("\n\n"+
 		"~~~ RESPONSE ~~~\n"+
 		"Code   : %v\n"+
 		"Status : %s\n"+
@@ -125,20 +134,24 @@ func (builderLogger *LoggerClient) formatResponseLogText(response *Response) str
 		response.GetStatus(),
 		composeHeaders(response.GetHeader()),
 		indentJson(response.String()))
-	if builderLogger.debugFile != nil {
-		if _, err := builderLogger.debugFile.WriteString(formatText); err != nil {
-			builderLogger.loggerArray = append(builderLogger.loggerArray, err.Error())
-		}
-	}
-	return repLogText
-}
-func (builderLogger *LoggerClient) ReturnLog() []string {
-	return builderLogger.loggerArray
 }
 
-//func (builderLogger *LoggerClient) ResponseResultMiddleware(f func(result string) string) {
-//	f(builderLogger.response.String())
-//}
+// newFormatResponseLogText 方法用于格式化 HTTP 响应的日志信息。
+func newFormatResponseLogText(response *Response) logrus.Fields {
+	h := response.GetHeader()
+	fields := logrus.Fields{
+		"Code":   response.GetStatusCode(),
+		"Status": response.GetStatus(),
+		"Header": h,
+		"Result": response.String(),
+	}
+	if cookies := h.Get("Cookies"); cookies != "" {
+		fields["Cookies"] = cookies
+	} else {
+		fields["Cookies"] = "this response has no cookies"
+	}
+	return fields
+}
 
 // formatLog 方法用于格式化日志信息。它接收一个 string 类型的参数，该参数表示日志信息的格式，以及一个 interface{} 类型的可变参数，该参数表示日志信息的参数。
 func formatLog(format string, params ...interface{}) string {
