@@ -105,6 +105,7 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 	if request.bodyBuf == nil {
 		request.bodyBuf = &bytes.Buffer{}
 	}
+	request.client.httpClientRaw.Jar.SetCookies(request.URL, request.Cookies)
 	request.NewRequest, err = request.newRequestWithContext()
 	if err != nil {
 		return nil, err
