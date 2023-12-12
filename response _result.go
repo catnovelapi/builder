@@ -120,3 +120,6 @@ func (response *Response) GetHeader() http.Header {
 func (response *Response) GetCookies() []*http.Cookie {
 	return response.ResponseRaw.Cookies()
 }
+func (response *Response) GetCookieString() string {
+	return response.ResponseRaw.Header.Get("Set-Cookie")
+}

@@ -141,8 +141,19 @@ func (client *Client) R() *Request {
 		Header:     sync.Map{},
 		FormData:   sync.Map{},
 		QueryParam: sync.Map{},
-		Cookies:    client.Cookies,
 	}
+	cookies := make([]*http.Cookie, 0)
+	for i, cookie := range client.Cookies {
+		// 创建一个新的cookie实例
+		newCookie := new(http.Cookie)
+		// 使用一个结构体赋值，复制cookie的值到新的实例
+		*newCookie = *cookie
+		// 将新的cookie指针放入新的切片中
+		cookies[i] = newCookie
+	}
+	// 现在 cookies 切片包含了原始cookies的深拷贝
+	req.Cookies = cookies // 将深拷贝的cookies设置到请求中
+
 	// 设置 Header
 	req.SetHeaders(client.Header)
 
@@ -182,12 +193,29 @@ func (client *Client) LogFatal(err error, query any, fileName string, funcName s
 	}).Fatal(err.Error())
 }
 
-// SetCookie 方法用于设置 HTTP 请求的 Cookie 部分。它接收一个 string 类型的参数，该参数表示 Cookie 的值。
-func (client *Client) SetCookie(cookie string) *Client {
-	if client.Header["Cookie"] == "" {
-		client.Header["Cookie"] = cookie
-	} else {
-		client.Header["Cookie"] += ";" + cookie
+// SetCookieString 方法用于设置 HTTP 请求的 Cookie 部分。它接收一个 string 类型的参数，该参数表示 Cookie 的值。
+func (client *Client) SetCookieString(cookieStr string) *Client {
+	// 按照分号拆分 Cookie 字符串
+	parts := strings.Split(cookieStr, ";")
+	for _, part := range parts {
+		// 分割每个键值对
+		keyValue := strings.SplitN(part, "=", 2)
+		if len(keyValue) == 2 {
+			// 修剪可能的空白字符并设置 Cookie
+			name := strings.TrimSpace(keyValue[0])
+			value := strings.TrimSpace(keyValue[1])
+			client.SetCookie(&http.Cookie{Name: name, Value: value})
+		}
+	}
+	return client
+}
+func (client *Client) SetCookie(cookie *http.Cookie) *Client {
+	client.Cookies = append(client.Cookies, cookie)
+	return client
+}
+func (client *Client) SetCookies(cookie []*http.Cookie) *Client {
+	for _, c := range cookie {
+		client.SetCookie(c)
 	}
 	return client
 }

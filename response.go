@@ -69,7 +69,7 @@ func (request *Request) newParseUrl(path string) (*url.URL, error) {
 func (request *Request) newRequestWithContext() (*http.Request, error) {
 	defer func() {
 		request.client.log.WithFields(newFormatRequestLogText(request)).Debug("request debug")
-		request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
+		_, _ = request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
 	}()
 	req, err := http.NewRequestWithContext(request.ctx, request.Method, request.URL.String(), request.bodyBuf)
 	if err != nil {
@@ -90,7 +90,7 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 	defer func() {
 		if request.client.GetClientDebug() {
 			request.client.log.WithFields(newFormatResponseLogText(response)).Debug("response debug")
-			request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
+			_, _ = request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
 		}
 	}()
 	request.Method = method
@@ -105,6 +105,7 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 	if request.bodyBuf == nil {
 		request.bodyBuf = &bytes.Buffer{}
 	}
+	request.client.httpClientRaw.Jar.SetCookies(request.URL, request.Cookies)
 	request.NewRequest, err = request.newRequestWithContext()
 	if err != nil {
 		return nil, err
