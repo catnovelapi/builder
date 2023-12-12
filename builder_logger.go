@@ -66,7 +66,7 @@ func newFormatResponseLogText(response *Response) logrus.Fields {
 	} else {
 		fields["Result"] = objmap
 	}
-	if cookies := h["Cookie"]; cookies != "" {
+	if cookies := h["Set-Cookie"]; cookies != "" {
 		fields["Cookie"] = cookies
 	} else {
 		fields["Cookie"] = "this response has no cookies"

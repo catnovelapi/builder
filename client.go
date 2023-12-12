@@ -182,12 +182,22 @@ func (client *Client) LogFatal(err error, query any, fileName string, funcName s
 	}).Fatal(err.Error())
 }
 
-// SetCookie 方法用于设置 HTTP 请求的 Cookie 部分。它接收一个 string 类型的参数，该参数表示 Cookie 的值。
-func (client *Client) SetCookie(cookie string) *Client {
+// SetCookieString 方法用于设置 HTTP 请求的 Cookie 部分。它接收一个 string 类型的参数，该参数表示 Cookie 的值。
+func (client *Client) SetCookieString(cookie string) *Client {
 	if client.Header["Cookie"] == "" {
 		client.Header["Cookie"] = cookie
 	} else {
 		client.Header["Cookie"] += ";" + cookie
+	}
+	return client
+}
+func (client *Client) SetCookie(cookie *http.Cookie) *Client {
+	client.Cookies = append(client.Cookies, cookie)
+	return client
+}
+func (client *Client) SetCookies(cookie []*http.Cookie) *Client {
+	for _, c := range cookie {
+		client.SetCookie(c)
 	}
 	return client
 }
