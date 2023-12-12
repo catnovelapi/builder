@@ -43,8 +43,8 @@ func newFormatRequestLogText(request *Request) logrus.Fields {
 		"HEADERS": h,
 		"BODY":    body,
 	}
-	if cookies := h["Cookie"]; cookies != "" {
-		fields["Cookie"] = cookies
+	if request.Cookies != nil {
+		fields["Cookie"] = request.Cookies
 	} else {
 		fields["Cookie"] = "this request has no cookies"
 	}
