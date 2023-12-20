@@ -68,8 +68,11 @@ func (request *Request) newParseUrl(path string) (*url.URL, error) {
 // newRequestWithContext 方法用于创建一个 HTTP 请求。它接收一个 string 类型的参数，该参数表示 HTTP 请求的 Path 部分。
 func (request *Request) newRequestWithContext() (*http.Request, error) {
 	defer func() {
-		request.client.log.WithFields(newFormatRequestLogText(request)).Debug("request debug")
-		_, _ = request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
+		if request.client.GetClientDebug() {
+			request.client.log.WithFields(newFormatRequestLogText(request)).Debug("request debug")
+			_, _ = request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
+
+		}
 	}()
 	req, err := http.NewRequestWithContext(request.ctx, request.Method, request.URL.String(), request.bodyBuf)
 	if err != nil {
