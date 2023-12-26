@@ -43,17 +43,15 @@ func createTransport(localAddr net.Addr) *http.Transport {
 
 // Client 类型用于存储 HTTP 请求的相关信息。
 type Client struct {
-	sync.RWMutex                // 用于保证线程安全
-	MaxConcurrent chan struct{} // 用于限制并发数
-	timeout       int           // timeout 用于存储 HTTP 请求的 Timeout 部分
-	baseUrl       string        // baseUrl 用于存储 HTTP 请求的 BaseUrl 部分
-	//debugLoggers           *LoggerClient     // debugLoggers 用于存储调试信息的文件
+	sync.RWMutex                         // 用于保证线程安全
+	MaxConcurrent          chan struct{} // 用于限制并发数
+	timeout                int           // timeout 用于存储 HTTP 请求的 Timeout 部分
+	baseUrl                string        // baseUrl 用于存储 HTTP 请求的 BaseUrl 部分
 	log                    *logrus.Logger
 	httpClientRaw          *http.Client      // httpClientRaw 用于存储 http.Client 的指针
 	Header                 map[string]string // Header 用于存储 HTTP 请求的 Header 部分
 	QueryParam             map[string]string // QueryParam 用于存储 HTTP 请求的 Query 部分
 	setResultFunc          func(v string) (string, error)
-	FormData               map[string]string
 	Token                  string
 	AuthScheme             string
 	Cookies                []*http.Cookie
@@ -77,7 +75,6 @@ func NewClient() *Client {
 		MaxConcurrent:          make(chan struct{}, 500), // 用于限制并发数, 最大并发数为 500
 		QueryParam:             map[string]string{},      // 初始化 QueryParam
 		Header:                 map[string]string{},      // 初始化 Header
-		FormData:               map[string]string{},
 		Cookies:                make([]*http.Cookie, 0),
 		log:                    logrus.New(),
 		JSONMarshal:            json.Marshal,
@@ -139,7 +136,6 @@ func (client *Client) R() *Request {
 		URL:        &url.URL{},
 		ctx:        context.Background(),
 		Header:     sync.Map{},
-		FormData:   sync.Map{},
 		QueryParam: sync.Map{},
 	}
 	cookies := make([]*http.Cookie, 0)
@@ -157,12 +153,6 @@ func (client *Client) R() *Request {
 	// 设置 Header
 	req.SetHeaders(client.Header)
 
-	if client.FormData != nil && len(client.FormData) > 0 {
-		req.SetFormDataMany(client.FormData)
-		if client.Header["Content-Type"] == "" {
-			req.SetHeader("Content-Type", "application/x-www-form-urlencoded")
-		}
-	}
 	req.SetQueryParams(client.QueryParam)
 	return req
 }
@@ -283,25 +273,15 @@ func (client *Client) SetQueryParams(params map[string]any) *Client {
 	return client
 }
 
-// SetFormDataMany 方法用于设置 HTTP 请求的 Query 部分。它接收一个 url.Values 类型的参数，
-func (client *Client) SetFormDataMany(params url.Values) *Client {
-	for key, value := range params {
-		client.SetFormData(key, value[0])
-	}
-	return client
-}
-func (client *Client) SetFormData(key string, value string) *Client {
-	client.FormData[key] = value
-	return client
-}
-
 // SetQueryParamString 方法用于设置 HTTP 请求的 Query 部分。它接收一个 string 类型的参数，
 func (client *Client) SetQueryParamString(query string) *Client {
 	// 将 query 解析为 url.Values 类型的参数
 	params, err := url.ParseQuery(strings.TrimSpace(query))
 	if err == nil {
 		// 将 params 中的参数存储到 QueryParam 中
-		client.SetFormDataMany(params)
+		for key, value := range params {
+			client.SetQueryParam(key, value[0])
+		}
 	} else {
 		client.LogError(err, query, "client.go", "SetQueryParamString")
 	}
