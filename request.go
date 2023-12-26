@@ -171,10 +171,29 @@ func (request *Request) GetRequestHeader() http.Header {
 	return header
 }
 func (request *Request) GetHeaderContentType() string {
-	for key, value := range request.GetRequestHeader() {
-		if key == "Content-Type" {
-			return value[0]
-		}
+	return request.GetRequestHeader().Get("Content-Type")
+}
+
+func (request *Request) jsonToMap(jsonStr string) map[string]string {
+	var result map[string]string
+	err := request.client.JSONUnmarshal([]byte(jsonStr), &result)
+	if err != nil {
+		request.client.LogError(err, jsonStr, "request.go", "jsonToMap")
 	}
-	return ""
+	return result
+}
+func (request *Request) mapToJson(params any) string {
+	jsonStr, err := request.client.JSONMarshal(params)
+	if err != nil {
+		request.client.LogError(err, params, "request.go", "mapToJson")
+	}
+	return string(jsonStr)
+}
+func (request *Request) structToJson(params any) string {
+	jsonStr, err := request.client.JSONMarshal(params)
+	if err != nil {
+		request.client.LogError(err, params, "request.go", "structToJson")
+	}
+	return string(jsonStr)
+
 }
