@@ -21,7 +21,6 @@ type Request struct {
 	client     *Client // 指向 Client 的指针
 	Header     sync.Map
 	QueryParam sync.Map
-	FormData   sync.Map
 	Cookies    []*http.Cookie
 	NewRequest *http.Request
 }
@@ -72,16 +71,6 @@ func (request *Request) SetQueryParam(key string, value interface{}) *Request {
 	request.QueryParam.Store(key, fmt.Sprintf("%v", value))
 	return request
 }
-func (request *Request) SetFormData(key string, value any) *Request {
-	request.FormData.Store(key, fmt.Sprintf("%v", value))
-	return request
-}
-func (request *Request) SetFormDataMany(params map[string]string) *Request {
-	for key, value := range params {
-		request.SetFormData(key, value)
-	}
-	return request
-}
 
 // SetQueryString 方法用于设置 HTTP 请求的 Query 部分。它接收一个 string 类型的参数，
 func (request *Request) SetQueryString(query string) *Request {
@@ -104,19 +93,6 @@ func (request *Request) SetHeaderContentType(contentType string) *Request {
 func (request *Request) GetQueryParamsEncode() string {
 	var parts []string
 	request.QueryParam.Range(func(key, value interface{}) bool {
-		k, _ := key.(string)
-		v, _ := value.(string)
-		part := fmt.Sprintf("%s=%s", url.QueryEscape(k), url.QueryEscape(v))
-		parts = append(parts, part)
-		return true
-	})
-	return strings.Join(parts, "&")
-}
-
-// GetFormDataEncode 方法用于获取 HTTP 请求的 Query 部分的 URL 编码字符串。
-func (request *Request) GetFormDataEncode() string {
-	var parts []string
-	request.FormData.Range(func(key, value interface{}) bool {
 		k, _ := key.(string)
 		v, _ := value.(string)
 		part := fmt.Sprintf("%s=%s", url.QueryEscape(k), url.QueryEscape(v))

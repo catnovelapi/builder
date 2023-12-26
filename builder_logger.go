@@ -27,12 +27,10 @@ func header2Map(header http.Header) map[string]string {
 func newFormatRequestLogText(request *Request) logrus.Fields {
 	var body string
 	if body = request.GetQueryParamsEncode(); body == "" {
-		if body = request.GetFormDataEncode(); body == "" {
-			if request.bodyBytes != nil {
-				body = string(request.bodyBytes)
-			} else {
-				body = "this request has no body"
-			}
+		if request.bodyBytes != nil {
+			body = string(request.bodyBytes)
+		} else {
+			body = "this request has no body"
 		}
 	}
 	fields := logrus.Fields{
