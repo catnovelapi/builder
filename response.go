@@ -3,8 +3,11 @@ package builder
 import (
 	"bytes"
 	"fmt"
+	"github.com/tidwall/gjson"
 	"net/http"
 	"net/url"
+	"reflect"
+	"strings"
 )
 
 const (
@@ -28,6 +31,12 @@ const (
 
 	// MethodOptions HTTP method
 	MethodOptions = "OPTIONS"
+
+	plainTextType = "text/plain; charset=utf-8"
+
+	jsonContentType = "application/json"
+
+	formContentType = "application/x-www-form-urlencoded"
 )
 
 type Response struct {
@@ -39,30 +48,29 @@ type Response struct {
 
 // newParseUrl 方法用于解析 URL。它接收一个 string 类型的参数，该参数表示 HTTP 请求的 Path 部分。
 func (request *Request) newParseUrl(path string) (*url.URL, error) {
-	// 如果 baseUrl 不为空，且 path 不是以 / 开头，则在 path 前加上 /
-	if request.client.GetClientBaseURL() == "" && path == "" {
-		err := fmt.Errorf("request Error: %s", "baseUrl is empty")
+	var err error
+	baseURL := request.client.GetClientBaseURL()
+
+	// Return an error if both the base URL and the path are empty
+	if baseURL == "" && path == "" {
+		err = fmt.Errorf("request Error: baseUrl and path are empty")
 		request.client.LogError(err, path, "response.go", "newParseUrl")
 		return nil, err
 	}
-	if request.client.GetClientBaseURL() != "" && path != "" {
-		if path[0] != '/' {
-			path = "/" + path
-		}
+
+	// Ensure path is properly prefixed with a "/"
+	if path != "" && !strings.HasPrefix(path, "/") {
+		path = "/" + path
 	}
-	// 解析 URL, 如果失败则返回错误
-	u, err := url.Parse(request.client.GetClientBaseURL() + path)
+
+	fullURL := baseURL + path
+	request.URL, err = url.Parse(fullURL)
 	if err != nil {
+		request.client.LogError(err, fullURL, "response.go", "newParseUrl")
 		return nil, err
 	}
-	request.URL = u
-	urlRawQuery := request.GetQueryParamsEncode()
-	if request.URL.RawQuery == "" {
-		request.URL.RawQuery = urlRawQuery
-	} else {
-		request.URL.RawQuery = request.URL.RawQuery + "&" + urlRawQuery
-	}
-	return u, nil
+	// Set URL and append query parameters
+	return request.URL, nil
 }
 
 // newRequestWithContext 方法用于创建一个 HTTP 请求。它接收一个 string 类型的参数，该参数表示 HTTP 请求的 Path 部分。
@@ -70,10 +78,20 @@ func (request *Request) newRequestWithContext() (*http.Request, error) {
 	defer func() {
 		if request.client.GetClientDebug() {
 			request.client.log.WithFields(newFormatRequestLogText(request)).Debug("request debug")
-			_, _ = request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
-
 		}
 	}()
+	newParamsEncode := request.GetQueryParamsEncode()
+	if newParamsEncode != "" {
+		if request.Method == MethodGet {
+			if request.URL.RawQuery != "" {
+				request.URL.RawQuery += "&"
+			}
+			request.URL.RawQuery += newParamsEncode
+		} else {
+			request.bodyBuf.WriteString(newParamsEncode)
+		}
+	}
+
 	req, err := http.NewRequestWithContext(request.ctx, request.Method, request.URL.String(), request.bodyBuf)
 	if err != nil {
 		request.client.LogError(err, request.Method, "response.go", "http.NewRequestWithContext")
@@ -93,20 +111,17 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 	defer func() {
 		if request.client.GetClientDebug() {
 			request.client.log.WithFields(newFormatResponseLogText(response)).Debug("response debug")
-			_, _ = request.client.log.Out.Write([]byte("------------------------------------------------------------------------------\n"))
 		}
 	}()
 	request.Method = method
 	if _, err = request.newParseUrl(path); err != nil {
 		return nil, err
 	}
-	// 设置请求方法, 如果请求方法为 GET, 则不设置请求体
-	if err = parseRequestBody(request); err != nil {
-		request.client.LogError(err, path, "util.go", "parseRequestBody")
-		return nil, err
-	}
 	if request.bodyBuf == nil {
 		request.bodyBuf = &bytes.Buffer{}
+	}
+	if request.Body != nil {
+		request.setBody()
 	}
 	request.client.httpClientRaw.Jar.SetCookies(request.URL, request.Cookies)
 	request.NewRequest, err = request.newRequestWithContext()
@@ -114,7 +129,6 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 		return nil, err
 	}
 	if request.client.GetClientRetryNumber() == 0 {
-		// 如果重试次数为 0，则设置重试次数为 1
 		request.client.SetRetryCount(1)
 	}
 	response, err = request.newDoRequest()
@@ -133,6 +147,37 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 		response.Result = response.String()
 	}
 	return response, nil
+}
+
+func (request *Request) setBody() {
+	contentType := request.GetHeaderContentType()
+	switch body := request.Body.(type) {
+	case string:
+		if contentType == formContentType {
+			if gjson.Valid(body) {
+				request.SetQueryParams(request.jsonToMap(body))
+			}
+		} else {
+			request.bodyBuf = bytes.NewBufferString(body)
+		}
+	case map[string]string, map[string]interface{}:
+		b := request.mapToJson(body)
+		if contentType == formContentType {
+			request.SetQueryParams(request.jsonToMap(b))
+		} else {
+			request.bodyBuf = bytes.NewBufferString(b)
+		}
+	default:
+		kind := reflect.TypeOf(body).Kind()
+		if kind == reflect.Struct || kind == reflect.Ptr {
+			b := request.structToJson(body)
+			if contentType == formContentType {
+				request.SetQueryParams(request.jsonToMap(b))
+			} else {
+				request.bodyBuf = bytes.NewBufferString(b)
+			}
+		}
+	}
 }
 
 // newDoResponse 方法用于执行 HTTP 请求。它接收一个 Response 对象的指针，表示 HTTP 请求的响应。
