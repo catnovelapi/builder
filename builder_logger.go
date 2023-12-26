@@ -35,12 +35,11 @@ func newFormatRequestLogText(request *Request) logrus.Fields {
 			}
 		}
 	}
-	h := header2Map(request.GetRequestHeader())
 	fields := logrus.Fields{
 		"Method":  request.GetMethod(),
 		"Host":    request.GetHost(),
 		"Path":    request.GetPath(),
-		"HEADERS": h,
+		"HEADERS": request.GetRequestHeader(),
 		"BODY":    body,
 	}
 	if request.Cookies != nil {
@@ -53,23 +52,24 @@ func newFormatRequestLogText(request *Request) logrus.Fields {
 
 // newFormatResponseLogText 方法用于格式化 HTTP 响应的日志信息。
 func newFormatResponseLogText(response *Response) logrus.Fields {
-	h := header2Map(response.GetHeader())
 	fields := logrus.Fields{
 		"Code":   response.GetStatusCode(),
 		"Status": response.GetStatus(),
 		"Proto":  response.GetProto(),
-		"Header": h,
+	}
+	if header := response.GetHeader(); header != nil {
+		if cookies := header.Get("Set-Cookie"); cookies != "" {
+			fields["Cookie"] = cookies
+		} else {
+			fields["Cookie"] = "this response has no cookies"
+		}
+		fields["Header"] = header
 	}
 	result := response.String()
 	if objmap, err := indentJson(result); err != nil {
 		fields["Result"] = result
 	} else {
 		fields["Result"] = objmap
-	}
-	if cookies := h["Set-Cookie"]; cookies != "" {
-		fields["Cookie"] = cookies
-	} else {
-		fields["Cookie"] = "this response has no cookies"
 	}
 	return fields
 }

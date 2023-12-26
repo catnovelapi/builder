@@ -3,8 +3,10 @@ package builder
 import (
 	"bytes"
 	"fmt"
+	"github.com/tidwall/gjson"
 	"net/http"
 	"net/url"
+	"reflect"
 )
 
 const (
@@ -28,6 +30,12 @@ const (
 
 	// MethodOptions HTTP method
 	MethodOptions = "OPTIONS"
+
+	plainTextType = "text/plain; charset=utf-8"
+
+	jsonContentType = "application/json"
+
+	formContentType = "application/x-www-form-urlencoded"
 )
 
 type Response struct {
@@ -74,6 +82,10 @@ func (request *Request) newRequestWithContext() (*http.Request, error) {
 
 		}
 	}()
+	newParamsEncode := request.GetQueryParamsEncode()
+	if request.GetHeaderContentType() == formContentType {
+		request.bodyBuf.WriteString(newParamsEncode)
+	}
 	req, err := http.NewRequestWithContext(request.ctx, request.Method, request.URL.String(), request.bodyBuf)
 	if err != nil {
 		request.client.LogError(err, request.Method, "response.go", "http.NewRequestWithContext")
@@ -100,13 +112,11 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 	if _, err = request.newParseUrl(path); err != nil {
 		return nil, err
 	}
-	// 设置请求方法, 如果请求方法为 GET, 则不设置请求体
-	if err = parseRequestBody(request); err != nil {
-		request.client.LogError(err, path, "util.go", "parseRequestBody")
-		return nil, err
-	}
 	if request.bodyBuf == nil {
 		request.bodyBuf = &bytes.Buffer{}
+	}
+	if request.Body != nil {
+		request.setBody()
 	}
 	request.client.httpClientRaw.Jar.SetCookies(request.URL, request.Cookies)
 	request.NewRequest, err = request.newRequestWithContext()
@@ -133,6 +143,36 @@ func (request *Request) newResponse(method, path string) (*Response, error) {
 		response.Result = response.String()
 	}
 	return response, nil
+}
+func (request *Request) setBody() {
+	contentType := request.GetHeaderContentType()
+	switch body := request.Body.(type) {
+	case string:
+		if contentType == formContentType {
+			if gjson.Valid(body) {
+				request.SetQueryParams(request.jsonToMap(body))
+			}
+		} else {
+			request.bodyBuf = bytes.NewBufferString(body)
+		}
+	case map[string]string, map[string]interface{}:
+		b := request.mapToJson(body)
+		if contentType == formContentType {
+			request.SetQueryParams(request.jsonToMap(b))
+		} else {
+			request.bodyBuf = bytes.NewBufferString(b)
+		}
+	default:
+		kind := reflect.TypeOf(body).Kind()
+		if kind == reflect.Struct || kind == reflect.Ptr {
+			b := request.structToJson(body)
+			if contentType == formContentType {
+				request.SetQueryParams(request.jsonToMap(b))
+			} else {
+				request.bodyBuf = bytes.NewBufferString(b)
+			}
+		}
+	}
 }
 
 // newDoResponse 方法用于执行 HTTP 请求。它接收一个 Response 对象的指针，表示 HTTP 请求的响应。
