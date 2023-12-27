@@ -91,11 +91,10 @@ func (request *Request) SetHeaderContentType(contentType string) *Request {
 // GetQueryParamsEncode 方法用于获取 HTTP 请求的 Query 部分的 URL 编码字符串。
 func (request *Request) GetQueryParamsEncode() string {
 	var parts []string
-	request.QueryParam.Range(func(key, value interface{}) bool {
+	request.QueryParam.Range(func(key any, value any) bool {
 		k, _ := key.(string)
 		v, _ := value.(string)
-		part := fmt.Sprintf("%s=%s", url.QueryEscape(k), url.QueryEscape(v))
-		parts = append(parts, part)
+		parts = append(parts, fmt.Sprintf("%s=%s", url.QueryEscape(k), url.QueryEscape(v)))
 		return true
 	})
 	return strings.Join(parts, "&")
