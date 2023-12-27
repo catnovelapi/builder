@@ -50,7 +50,7 @@ type Client struct {
 	log                    *logrus.Logger
 	httpClientRaw          *http.Client      // httpClientRaw 用于存储 http.Client 的指针
 	Header                 map[string]string // Header 用于存储 HTTP 请求的 Header 部分
-	QueryParam             map[string]string // QueryParam 用于存储 HTTP 请求的 Query 部分
+	QueryParam             map[string]any    // QueryParam 用于存储 HTTP 请求的 Query 部分
 	setResultFunc          func(v string) (string, error)
 	Token                  string
 	AuthScheme             string
@@ -73,7 +73,7 @@ func NewClient() *Client {
 	cookieJar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	client := &Client{
 		MaxConcurrent:          make(chan struct{}, 500), // 用于限制并发数, 最大并发数为 500
-		QueryParam:             map[string]string{},      // 初始化 QueryParam
+		QueryParam:             map[string]any{},         // 初始化 QueryParam
 		Header:                 map[string]string{},      // 初始化 Header
 		Cookies:                make([]*http.Cookie, 0),
 		log:                    logrus.New(),
@@ -261,7 +261,7 @@ func (client *Client) SetUserAgent(userAgent string) *Client {
 
 // SetQueryParam 方法用于设置 HTTP 请求的 Query 部分。它接收两个 string 类型的参数，
 func (client *Client) SetQueryParam(key string, value any) *Client {
-	client.QueryParam[key] = fmt.Sprintf("%v", value)
+	client.QueryParam[key] = value
 	return client
 }
 

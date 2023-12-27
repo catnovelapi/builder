@@ -15,7 +15,7 @@ type Request struct {
 	URL        *url.URL
 	ctx        context.Context
 	Method     string // HTTP 请求的 Method 部分
-	Body       interface{}
+	Body       any
 	bodyBuf    *bytes.Buffer
 	bodyBytes  []byte
 	client     *Client // 指向 Client 的指针
@@ -32,7 +32,6 @@ func (request *Request) SetBody(v interface{}) *Request {
 
 // SetHeader 方法用于设置 HTTP 请求的 Header 部分。它接收两个 string 类型的参数，
 func (request *Request) SetHeader(key, value string) *Request {
-	//request.RequestRaw.Header.Set(key, value)
 	request.Header.Store(key, value)
 	return request
 }
@@ -59,7 +58,7 @@ func (request *Request) SetCookie(cookie *http.Cookie) *Request {
 }
 
 // SetQueryParams 方法用于设置 HTTP 请求的 Query 部分。它接收一个 map[string]interface{} 类型的参数，
-func (request *Request) SetQueryParams(query map[string]string) *Request {
+func (request *Request) SetQueryParams(query map[string]any) *Request {
 	for key, value := range query {
 		request.SetQueryParam(key, value)
 	}
@@ -67,8 +66,8 @@ func (request *Request) SetQueryParams(query map[string]string) *Request {
 }
 
 // SetQueryParam 方法用于设置 HTTP 请求的 Query 部分。它接收两个 string 类型的参数，
-func (request *Request) SetQueryParam(key string, value interface{}) *Request {
-	request.QueryParam.Store(key, fmt.Sprintf("%v", value))
+func (request *Request) SetQueryParam(key string, value any) *Request {
+	request.QueryParam.Store(key, value)
 	return request
 }
 
@@ -150,8 +149,8 @@ func (request *Request) GetHeaderContentType() string {
 	return request.GetRequestHeader().Get("Content-Type")
 }
 
-func (request *Request) jsonToMap(jsonStr string) map[string]string {
-	var result map[string]string
+func (request *Request) jsonToMap(jsonStr string) map[string]any {
+	var result map[string]any
 	err := request.client.JSONUnmarshal([]byte(jsonStr), &result)
 	if err != nil {
 		request.client.LogError(err, jsonStr, "request.go", "jsonToMap")
